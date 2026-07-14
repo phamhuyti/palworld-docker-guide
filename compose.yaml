@@ -1,0 +1,37 @@
+# Palworld Dedicated Server — bản mẫu dựa trên compose.yaml chính thức của Pocketpair
+# https://github.com/pocketpairjp/palworld-dedicated-server-docker
+#
+# Chạy:    docker compose up -d
+# Log:     docker compose logs -f
+# Dừng:    docker compose down
+#
+# Cấu hình game: sửa ./Saved/Config/LinuxServer/PalWorldSettings.ini (sinh ra sau lần chạy đầu)
+# rồi docker compose restart. Chi tiết mọi thông số: xem HUONG-DAN-CONFIG.md
+
+services:
+  palworld-server:
+    # Danh sách tag: https://github.com/pocketpairjp/palworld-dedicated-server-docker/pkgs/container/palserver
+    # Tag phải KHỚP phiên bản game của client. v1.0.0.100427 = Palworld 1.0 (10/07/2026)
+    image: ghcr.io/pocketpairjp/palserver:v1.0.0.100427
+    container_name: palworld-server
+    restart: unless-stopped
+    # Cho server thời gian save khi dừng container (tránh mất dữ liệu)
+    stop_grace_period: 30s
+    entrypoint: /pal/helper.sh
+    # Tham số dòng lệnh: https://tech.palworldgame.com/settings-and-operation/arguments
+    command:
+      - -port=8211              # Port UDP; đổi thì phải đổi cả mục ports bên dưới
+      - -useperfthreads         # 3 flag hiệu năng — nên giữ nguyên
+      - -NoAsyncLoadingThread
+      - -UseMultithreadForDS
+      # - -publiclobby          # Bật nếu muốn hiện trên community server list
+      # - -publicip=1.2.3.4     # IP công khai (cần khi server sau NAT)
+      # - -logformat=json       # Log dạng JSON cho log collector
+    ports:
+      - "8211:8211/udp"
+      # Chỉ mở RCON/REST API trên localhost — KHÔNG expose ra Internet
+      # - "127.0.0.1:25575:25575/tcp"   # RCON      (cần RCONEnabled=True trong ini)
+      # - "127.0.0.1:8212:8212/tcp"     # REST API  (cần RESTAPIEnabled=True trong ini)
+    volumes:
+      - ./helper.sh:/pal/helper.sh:ro
+      - ./Saved:/pal/Package/Pal/Saved   # Toàn bộ save + config nằm ở đây — backup thư mục này
