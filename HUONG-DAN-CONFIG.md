@@ -513,6 +513,71 @@ Khôi phục backup: `docker compose down` → giải nén đè thư mục `Save
 
 > Có thể dùng tag `latest` để đỡ sửa file, nhưng **không khuyến nghị** cho server nghiêm túc: bạn sẽ không kiểm soát thời điểm update và dễ lệch version với save/mod.
 
+### Tự động cập nhật (auto-update)
+
+Image chính thức pin phiên bản trong tag nên **restart container KHÔNG tự lấy bản mới**. Có 3 cách tự động hóa:
+
+#### Cách 1 — Tag `latest` + cron script (vẫn dùng image chính thức, khuyến nghị)
+
+Đổi `image:` thành `ghcr.io/pocketpairjp/palserver:latest`, rồi tạo script `update.sh` cạnh `compose.yaml`:
+
+```sh
+#!/bin/sh
+# update.sh — tự update Palworld server, downtime tối thiểu
+set -e
+cd "$(dirname "$0")"
+
+# 1. Kéo image mới TRONG LÚC server vẫn đang chạy bản cũ
+#    (bước tải nặng nhất diễn ra khi server còn sống => giảm downtime)
+docker compose pull -q
+
+# 2. So sánh image đang chạy với image vừa kéo — không có bản mới thì thoát,
+#    server không bị restart oan
+RUNNING=$(docker inspect --format '{{.Image}}' palworld-server)
+LATEST=$(docker image inspect --format '{{.Id}}' ghcr.io/pocketpairjp/palserver:latest)
+[ "$RUNNING" = "$LATEST" ] && exit 0
+
+# 3. (Tùy chọn, cần RESTAPIEnabled=True) báo trước cho người chơi + ép save
+# curl -su admin:MATKHAU -X POST http://127.0.0.1:8212/v1/api/announce \
+#   -H "Content-Type: application/json" -d '{"message":"Server update sau 5 phut!"}'
+# sleep 300
+# curl -su admin:MATKHAU -X POST http://127.0.0.1:8212/v1/api/save
+
+# 4. Dừng, backup, khởi động lại bằng image mới (đã có sẵn trên máy => lên ngay)
+docker compose down
+tar czf "backup-$(date +%Y%m%d-%H%M).tar.gz" Saved/
+docker compose up -d
+```
+
+```bash
+chmod +x update.sh
+# Cron 5h sáng mỗi ngày:
+echo '0 5 * * * root /path/palworld/update.sh >> /var/log/palworld-update.log 2>&1' | sudo tee /etc/cron.d/palworld-update
+```
+
+Điểm mấu chốt giảm downtime: **`pull` trước khi `down`** — image mới được tải về khi server còn chạy, nên thời gian chết chỉ còn đúng khoảng dừng + backup + khởi động (thường < 1–2 phút), thay vì phải chờ tải vài GB.
+
+#### Cách 2 — Watchtower (tự động hoàn toàn)
+
+Watchtower theo dõi registry, tự pull + recreate container khi tag `latest` có bản mới:
+
+```yaml
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --scope palworld --cleanup --interval 3600
+  # thêm vào service palworld-server:
+  #   labels: ["com.centurylinklabs.watchtower.scope=palworld"]
+```
+
+⚠️ Watchtower restart "thô": không cảnh báo người chơi, không backup. Giữ `stop_grace_period: 30s` trở lên để server kịp save.
+
+#### Cách 3 — Image cộng đồng (restart là có bản mới nhất)
+
+[thijsvanloef/palworld-server-docker](https://github.com/thijsvanloef/palworld-server-docker) tải server qua SteamCMD mỗi lần khởi động: `UPDATE_ON_BOOT=true` (restart = bản mới nhất), `AUTO_UPDATE_ENABLED=true` + `AUTO_UPDATE_CRON_EXPRESSION` (update theo lịch), `AUTO_UPDATE_WARN_MINUTES=30` (báo trước người chơi), kèm backup tự động. Đổi lại: không phải image chính thức của Pocketpair.
+
 ## 13. Nguồn tham khảo
 
 - Repo chính thức: https://github.com/pocketpairjp/palworld-dedicated-server-docker
