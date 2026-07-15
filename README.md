@@ -2,14 +2,16 @@
 
 Hướng dẫn tiếng Việt **cấu hình đầy đủ** Palworld Dedicated Server chạy bằng Docker, dựa trên phân tích repo chính thức của Pocketpair: [pocketpairjp/palworld-dedicated-server-docker](https://github.com/pocketpairjp/palworld-dedicated-server-docker).
 
-Tương ứng **Palworld 1.0** (update 1.100.427, 10/07/2026) — image `ghcr.io/pocketpairjp/palserver:v1.0.0.100427`.
+Tương ứng **Palworld 1.0.x** (bản 1.0 ra ngày 10/07/2026) — image mới nhất `ghcr.io/pocketpairjp/palserver:v1.0.1.100619`.
 
 ## Nội dung
 
 | File | Mô tả |
 |---|---|
-| **[HUONG-DAN-CONFIG.md](HUONG-DAN-CONFIG.md)** | 📖 Tài liệu chính: phân tích repo, tham số dòng lệnh, **giải thích toàn bộ 119 thông số `PalWorldSettings.ini`**, cấu hình mẫu, firewall/bảo mật, RCON/REST API, cập nhật & backup |
-| [compose.yaml](compose.yaml) | Docker Compose mẫu (dựa trên bản chính thức, có chú thích tiếng Việt) |
+| **[HUONG-DAN-CONFIG.md](HUONG-DAN-CONFIG.md)** | 📖 Tài liệu chính: phân tích repo, tham số dòng lệnh, **giải thích toàn bộ 119 thông số `PalWorldSettings.ini`**, cấu hình mẫu, firewall/bảo mật, auto-update, cập nhật & backup |
+| **[HUONG-DAN-QUAN-TRI.md](HUONG-DAN-QUAN-TRI.md)** | 🛠️ Quản trị server bằng **RCON & REST API**: bật 2 tool, bảng endpoint/lệnh đầy đủ, kick/ban, restart có báo trước, giám sát, bảo mật |
+| [compose.yaml](compose.yaml) | Docker Compose mẫu (RCON/REST bật sẵn trên localhost, auto-update qua tag `latest`) |
+| [update.sh](update.sh) | Script auto-update giảm downtime (pull trước khi down, báo người chơi, backup) — chạy bằng cron |
 | [helper.sh](helper.sh) | Script entrypoint (nguyên bản từ repo gốc) |
 | [PalWorldSettings.ini.example](PalWorldSettings.ini.example) | File cấu hình mẫu đầy đủ 119 thông số với giá trị mặc định |
 

@@ -11,8 +11,11 @@
 services:
   palworld-server:
     # Danh sách tag: https://github.com/pocketpairjp/palworld-dedicated-server-docker/pkgs/container/palserver
-    # Tag phải KHỚP phiên bản game của client. v1.0.0.100427 = Palworld 1.0 (10/07/2026)
-    image: ghcr.io/pocketpairjp/palserver:v1.0.0.100427
+    # Tag phải KHỚP phiên bản game của client.
+    # "latest" dùng kèm auto-update qua update.sh (xem HUONG-DAN-CONFIG.md mục 12).
+    # Muốn tự kiểm soát thời điểm update thì pin cứng, ví dụ:
+    #   image: ghcr.io/pocketpairjp/palserver:v1.0.1.100619
+    image: ghcr.io/pocketpairjp/palserver:latest
     container_name: palworld-server
     restart: unless-stopped
     # Cho server thời gian save khi dừng container (tránh mất dữ liệu)
@@ -29,9 +32,11 @@ services:
       # - -logformat=json       # Log dạng JSON cho log collector
     ports:
       - "8211:8211/udp"
-      # Chỉ mở RCON/REST API trên localhost — KHÔNG expose ra Internet
-      # - "127.0.0.1:25575:25575/tcp"   # RCON      (cần RCONEnabled=True trong ini)
-      # - "127.0.0.1:8212:8212/tcp"     # REST API  (cần RESTAPIEnabled=True trong ini)
+      # RCON/REST API chỉ bind localhost — KHÔNG expose ra Internet.
+      # Cần bật trong PalWorldSettings.ini: RCONEnabled=True, RESTAPIEnabled=True,
+      # AdminPassword="..." — xem HUONG-DAN-QUAN-TRI.md
+      - "127.0.0.1:25575:25575/tcp"   # RCON
+      - "127.0.0.1:8212:8212/tcp"     # REST API
     volumes:
       - ./helper.sh:/pal/helper.sh:ro
       - ./Saved:/pal/Package/Pal/Saved   # Toàn bộ save + config nằm ở đây — backup thư mục này

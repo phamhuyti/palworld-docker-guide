@@ -33,7 +33,8 @@ Repo `pocketpairjp/palworld-dedicated-server-docker` là repo **chính thức c�
 
 | Tag image | Ngày phát hành | Tương ứng bản game |
 |---|---|---|
-| **`v1.0.0.100427`** (mới nhất, = `latest`) | ~10/07/2026 | **Palworld 1.0** (update 1.100.427) |
+| **`v1.0.1.100619`** (mới nhất, = `latest`) | 14/07/2026 | **Palworld 1.0.1** (hotfix sau 1.0) |
+| `v1.0.0.100427` | 10/07/2026 | Palworld 1.0 (update 1.100.427) |
 | `v0.7.3.90464` | ~04/2026 | 0.7.3 (Early Access) |
 | `v0.7.2.87654` | ~02/2026 | 0.7.2 |
 | `v0.7.1.86065` | ~01/2026 | 0.7.1 |
@@ -488,6 +489,8 @@ curl -u admin:matkhau -X POST http://127.0.0.1:8212/v1/api/shutdown -H "Content-
 ```
 
 Các endpoint khác: `/v1/api/settings`, `/v1/api/metrics`, `/v1/api/kick`, `/v1/api/ban`, `/v1/api/unban`, `/v1/api/stop`.
+
+👉 **Hướng dẫn quản trị chi tiết** (bảng endpoint đầy đủ, lệnh RCON, lệnh admin trong game, kịch bản kick/ban/restart/giám sát): xem [HUONG-DAN-QUAN-TRI.md](HUONG-DAN-QUAN-TRI.md).
 
 ## 12. Cập nhật phiên bản & backup
 
