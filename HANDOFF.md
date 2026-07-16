@@ -22,11 +22,11 @@ Phân tích repo Docker **chính thức** của Pocketpair cho Palworld dedicate
 | `helper.sh` | Entrypoint nguyên bản từ repo gốc (chown Saved rồi exec PalServer.sh) | ✅ Xong |
 | `PalWorldSettings.ini.example` | Đủ 119 key với giá trị mặc định, hướng dẫn định dạng 2 dòng bắt buộc | ✅ Xong |
 | `config-editor.html` | **Web app chỉnh config trực quan** (standalone, offline): 119 tham số theo 11 nhóm, control theo kiểu (toggle/slider/dropdown/checkbox platform/password), note giải thích + cảnh báo ngoài phạm vi, badge "đã đổi", tìm kiếm, 5 preset, nhập file hiện tại (parse client-side, không nhúng mật khẩu), xuất `.ini` 2 dòng đúng thứ tự key CANON, tự lưu localStorage, light/dark. Cũng đã publish Artifact | ✅ Xong |
-| `admin-tool.py` | **Bảng điều khiển quản trị + PWA** (Python stdlib, không cần cài gì): backend serve web + proxy tới REST API (Basic auth) và RCON (socket TCP tự implement Source RCON). Giao diện: trạng thái server (info+metrics auto-refresh), bảng người chơi kick/ban 2-click-confirm, announce, save, shutdown/stop, unban, RCON console, log. **Bảo mật tầng app** (thêm theo yêu cầu dùng qua Internet/VPN): đăng nhập PAL_APP_PASSWORD (tách khỏi AdminPassword) + phiên cookie HttpOnly (secrets token, hạn PAL_SESSION_HOURS) + khóa 5 phút sau 5 lần sai + header bảo mật; bind ra ngoài localhost thì BẮT BUỘC có PAL_APP_PASSWORD (nếu không, từ chối chạy). **PWA**: /manifest.webmanifest + /sw.js (cache shell) + icon PNG tự vẽ chữ P (encoder PNG bằng zlib, không cần Pillow) → cài lên Android. **TLS tùy chọn** qua PAL_TLS_CERT/PAL_TLS_KEY (cookie Secure khi bật). Cấu hình toàn bộ qua ENV, KHÔNG hardcode. Đã test đầy đủ bằng curl+Chrome: redirect /→/login, login sai→401, đúng→cookie, rate-limit→429, assets công khai OK, PNG 512² hợp lệ, proxy REST 401 + RCON auth-fail tới server thật `192.168.1.160`. User dùng: PWA + đã có OpenVPN (không cần Cloudflare/Tailscale). Fix Windows cp1252 bằng stdout.reconfigure(utf-8) | ✅ Xong |
+| `admin-tool.py` | **Bảng điều khiển quản trị + PWA** (Python stdlib, không cần cài gì): backend serve web + proxy tới REST API (Basic auth) và RCON (socket TCP tự implement Source RCON). Giao diện: trạng thái server (info+metrics auto-refresh), bảng người chơi kick/ban 2-click-confirm, announce, save, shutdown/stop, unban, RCON console, log. **Đếm ngược spam thông báo** (`/api/countdown` + cancel + status): luồng nền spam `/announce` dày dần (mỗi phút→30s→10s→5..1s) rồi save+shutdown; chỉ 1 lần chạy (trùng→409). **Save tường minh** trước cả Shutdown lẫn Stop. **Bảo mật tầng app**: đăng nhập PAL_APP_PASSWORD (tách khỏi AdminPassword) + phiên cookie HttpOnly (secrets token, hạn PAL_SESSION_HOURS) + khóa 5 phút sau 5 lần sai + header bảo mật; bind ra ngoài localhost thì BẮT BUỘC có PAL_APP_PASSWORD (nếu không, từ chối chạy). **PWA**: /manifest.webmanifest + /sw.js + icon PNG tự vẽ chữ P (encoder zlib, không cần Pillow) → cài lên Android. **TLS tùy chọn** qua PAL_TLS_CERT/PAL_TLS_KEY. Cấu hình toàn bộ qua ENV, KHÔNG hardcode. Chạy được như **service Docker `palworld-admin`** (xem compose). Đã test bằng curl+Chrome (không chạy lệnh sống lên server thật theo yêu cầu người dùng). Fix Windows cp1252 bằng stdout.reconfigure(utf-8) | ✅ Xong |
 | `README.md` | Mục lục + chạy nhanh (đã thêm config-editor.html + admin-tool.py) | ✅ Xong |
 | `.gitignore` | Thêm __pycache__, *.local.*, run-admin*, backup-*.tar.gz | ✅ Xong |
 
-Lịch sử commit: `0e95884` (bộ tài liệu ban đầu) → `558c5f0` (mục auto-update) → `264f1ad` (quản trị RCON/REST + update.sh + bật port trong compose).
+Lịch sử commit chính: `0e95884` (tài liệu ban đầu) → `558c5f0` (auto-update) → `264f1ad` (RCON/REST + update.sh) → `5933ca0` (HANDOFF) → `8dc6d31` (config-editor.html) → `08764f8` (editor mở/lưu file) → `fcc0518`/`773acb2` (admin-tool.py + bảo mật/PWA) → `6fab9ef` (service palworld-admin trong compose) → `0ee7a9d` (đếm ngược spam) → `7f0b2ce` (save trước shutdown/stop).
 
 ## 3. Thông tin phiên bản (quan trọng khi tiếp tục)
 
@@ -37,12 +37,12 @@ Lịch sử commit: `0e95884` (bộ tài liệu ban đầu) → `558c5f0` (mục
 
 ## 4. Setup máy của người dùng (server thật đang chạy)
 
-- Compose cá nhân: port game bind IP LAN **`192.168.1.160:8211:8211/udp`**, image đang chạy `v1.0.1.100619` (= latest hiện tại). Đã được sửa: fix lỗi thụt lề YAML (file cũ để `palworld-server:` ngang hàng `services:` → compose lỗi), thêm 2 port quản trị bind localhost, `stop_grace_period`, chuyển tag `latest`.
-- **Việc người dùng CHƯA chắc đã làm** (cần nhắc/kiểm tra khi tiếp tục):
-  1. Sửa `./Saved/Config/LinuxServer/PalWorldSettings.ini`: `AdminPassword="..."`, `RCONEnabled=True`, `RESTAPIEnabled=True` (mở port trong compose thôi là CHƯA đủ).
-  2. Điền `ADMIN_PASSWORD` vào đầu `update.sh`.
-  3. Đặt cron: `0 5 * * * root /duong-dan/palworld/update.sh >> /var/log/palworld-update.log 2>&1`
-  4. Kiểm tra REST API: `curl -u admin:MATKHAU http://127.0.0.1:8212/v1/api/info`
+- NAS Synology `CaoHuy_NAS`. Thư mục compose: `/volume4/docker/Palworld` = ổ mạng **`X:\Palworld`** trên Windows (SMB). Container chạy trên NAS; sửa file qua `X:\`, chạy `docker compose` phải SSH vào NAS.
+- Compose: game bind **`192.168.1.160:8211/udp`** + RCON `25575` + REST `8212` (đều bind IP LAN). Image `latest`, `stop_grace_period: 30s`. **Đã thêm service `palworld-admin`** (admin-tool.py chạy trong Docker, mở `8080`, mật khẩu từ `.env`).
+- **Đã LÀM trong phiên (16/07/2026):** bật `RCONEnabled=True`, `RESTAPIEnabled=True`, đặt `AdminPassword`; mở 2 port quản trị ra IP LAN; tạo `X:\Palworld\.env` (PAL_ADMIN_PASSWORD); copy `admin-tool.py` vào thư mục compose. Đã kiểm chứng REST+RCON **truy cập được** từ máy Windows (401 với mật khẩu giả).
+- **Thay đổi gameplay đã ghi vào ini** (chờ restart để áp dụng): `PalDamageRateAttack=2`, `PalDamageRateDefense=0.5`, `PalStaminaDecreaceRate=0.25`, `bIsPvP=True`, `bEnablePlayerToPlayerDamage=True`, `bCanPickupOtherGuildDeathPenaltyDrop=True`, `DeathPenalty=ItemAndEquipment`.
+- **Việc người dùng CẦN chạy trên NAS (SSH):** `cd /volume4/docker/Palworld && docker compose up -d` (bật admin-tool) và `docker compose restart palworld-server` (áp dụng các thay đổi ini). Truy cập tool: vào OpenVPN → `http://192.168.1.160:8080`.
+- Còn tùy chọn: đặt lịch `update.sh` qua Synology Task Scheduler (`/volume4/docker/Palworld/update.sh`).
 
 ## 5. Nguồn dữ liệu & lưu ý kỹ thuật cho phiên sau
 
