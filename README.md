@@ -11,6 +11,7 @@ Tương ứng **Palworld 1.0.x** (bản 1.0 ra ngày 10/07/2026) — image mới
 | **[HUONG-DAN-CONFIG.md](HUONG-DAN-CONFIG.md)** | 📖 Tài liệu chính: phân tích repo, tham số dòng lệnh, **giải thích toàn bộ 119 thông số `PalWorldSettings.ini`**, cấu hình mẫu, firewall/bảo mật, auto-update, cập nhật & backup |
 | **[HUONG-DAN-QUAN-TRI.md](HUONG-DAN-QUAN-TRI.md)** | 🛠️ Quản trị server bằng **RCON & REST API**: bật 2 tool, bảng endpoint/lệnh đầy đủ, kick/ban, restart có báo trước, giám sát, bảo mật |
 | **[config-editor.html](config-editor.html)** | 🧩 **Trình chỉnh cấu hình trực quan** (web app): chỉnh cả 119 tham số bằng toggle/slider/dropdown, có note giải thích + preset, nhập file hiện tại & xuất ra `.ini` chuẩn. Mở trực tiếp bằng trình duyệt |
+| **[admin-tool.py](admin-tool.py)** | 🎛️ **Bảng điều khiển quản trị** (Python + web UI): xem người chơi/FPS/uptime, thông báo, save, kick/ban/unban, shutdown, RCON console. Chạy `python admin-tool.py` rồi mở `localhost:8080` |
 | [compose.yaml](compose.yaml) | Docker Compose mẫu (RCON/REST bật sẵn trên localhost, auto-update qua tag `latest`) |
 | [update.sh](update.sh) | Script auto-update giảm downtime (pull trước khi down, báo người chơi, backup) — chạy bằng cron |
 | [helper.sh](helper.sh) | Script entrypoint (nguyên bản từ repo gốc) |

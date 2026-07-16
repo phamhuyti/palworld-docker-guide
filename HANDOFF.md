@@ -21,7 +21,9 @@ Phân tích repo Docker **chính thức** của Pocketpair cho Palworld dedicate
 | `helper.sh` | Entrypoint nguyên bản từ repo gốc (chown Saved rồi exec PalServer.sh) | ✅ Xong |
 | `PalWorldSettings.ini.example` | Đủ 119 key với giá trị mặc định, hướng dẫn định dạng 2 dòng bắt buộc | ✅ Xong |
 | `config-editor.html` | **Web app chỉnh config trực quan** (standalone, offline): 119 tham số theo 11 nhóm, control theo kiểu (toggle/slider/dropdown/checkbox platform/password), note giải thích + cảnh báo ngoài phạm vi, badge "đã đổi", tìm kiếm, 5 preset, nhập file hiện tại (parse client-side, không nhúng mật khẩu), xuất `.ini` 2 dòng đúng thứ tự key CANON, tự lưu localStorage, light/dark. Cũng đã publish Artifact | ✅ Xong |
-| `README.md` | Mục lục + chạy nhanh (đã thêm dòng config-editor.html) | ✅ Xong |
+| `admin-tool.py` | **Bảng điều khiển quản trị** (Python stdlib, không cần cài gì): backend serve web trên localhost:8080 + proxy tới REST API (Basic auth) và RCON (socket TCP tự implement Source RCON). Giao diện: trạng thái server (info+metrics auto-refresh), bảng người chơi với nút kick/ban 2-click-confirm, announce, save, shutdown/stop, unban, RCON console, log. Cấu hình qua ENV (PAL_HOST/PAL_ADMIN_PASSWORD/PAL_REST_PORT/PAL_RCON_PORT/PAL_WEB_PORT), KHÔNG hardcode mật khẩu. Đã test: REST trả 401 + RCON auth-fail với mật khẩu giả → xác nhận cả 2 đường đều tới được server thật `192.168.1.160`. Fix Windows cp1252 bằng stdout.reconfigure(utf-8) | ✅ Xong |
+| `README.md` | Mục lục + chạy nhanh (đã thêm config-editor.html + admin-tool.py) | ✅ Xong |
+| `.gitignore` | Thêm __pycache__, *.local.*, run-admin*, backup-*.tar.gz | ✅ Xong |
 
 Lịch sử commit: `0e95884` (bộ tài liệu ban đầu) → `558c5f0` (mục auto-update) → `264f1ad` (quản trị RCON/REST + update.sh + bật port trong compose).
 

@@ -1,1 +1,13 @@
 Saved/
+
+# Python
+__pycache__/
+*.pyc
+
+# Bản chạy cá nhân có chứa mật khẩu (không commit)
+*.local.*
+run-admin*.ps1
+run-admin*.sh
+
+# Backup save
+backup-*.tar.gz
