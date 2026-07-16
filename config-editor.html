@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Palworld Config Editor — PalWorldSettings.ini</title>
-<meta name="description" content="Trình chỉnh cấu hình Palworld Dedicated Server trực quan: 119 tham số PalWorldSettings.ini có giải thích tiếng Việt, xuất ra file ini chuẩn.">
+<meta name="description" content="Trình chỉnh cấu hình Palworld Dedicated Server trực quan: 119 tham số PalWorldSettings.ini có giải thích tiếng Việt, mở & lưu đè file trực tiếp, xuất ra file ini chuẩn.">
 <style>html,body{margin:0}img{max-width:100%}</style>
 </head>
 <body>
@@ -47,6 +47,7 @@
     --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
   }
   *{box-sizing:border-box}
+  [hidden]{display:none!important}
   body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
     font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
   button{font-family:inherit;cursor:pointer}
@@ -179,6 +180,12 @@
   .dock .lbl{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:9px}
   .dock .lbl b{color:var(--text);font-variant-numeric:tabular-nums}
   .dock .grow{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .open-name{font-family:var(--mono);font-size:11.5px;color:var(--accent-ink);
+    background:var(--accent-weak);border:1px solid var(--accent);border-radius:6px;padding:2px 8px;
+    display:inline-flex;align-items:center;gap:5px}
+  .open-name::before{content:"●";font-size:8px;color:var(--accent)}
+  .btn.save{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.save:hover{filter:brightness(1.06)}
 
   /* ---- modal ---- */
   .overlay{position:fixed;inset:0;z-index:60;background:rgba(10,15,12,.5);
@@ -236,9 +243,13 @@
     </div>
     <span class="changed-pill" id="changedPill" hidden><span id="changedCount">0</span> đã đổi</span>
     <div class="actions">
+      <button class="btn ghost" id="btnOpenFile" title="Mở trực tiếp file .ini để chỉnh và lưu đè" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+        Mở file .ini
+      </button>
       <button class="btn ghost" id="btnImport" title="Dán nội dung file hiện tại để nạp vào">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Nhập file hiện tại
+        Nhập (dán)
       </button>
       <button class="btn ghost" id="btnReset" title="Đưa tất cả về mặc định game">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.4 2.6L3 8"/><path d="M3 3v5h5"/></svg>
@@ -259,7 +270,7 @@
       <input id="searchBox" type="text" placeholder="Tìm tham số / giải thích…" autocomplete="off">
     </div>
     <nav class="navlist" id="navlist"></nav>
-    <p class="rail-note">Sửa xong hãy <b>Xuất cấu hình</b> → dán/tải đè file <span style="font-family:var(--mono)">Saved/Config/LinuxServer/PalWorldSettings.ini</span> rồi <b>restart container</b> để áp dụng.</p>
+    <p class="rail-note">Mở file này trực tiếp trong Chrome để dùng <b>Mở file .ini</b> → chỉnh → <b>Lưu đè file đang mở</b> (ghi thẳng vào file). Hoặc <b>Nhập (dán)</b> / <b>Xuất cấu hình</b> thủ công. Sửa xong nhớ <b>restart container</b>.</p>
   </aside>
 
   <main class="content" id="content">
@@ -275,9 +286,14 @@
   <div class="dock-in">
     <div class="lbl">
       <span>Tham số đã đổi khỏi mặc định: <b id="dockChanged">0</b> / <b>119</b></span>
+      <span id="openName" class="open-name" hidden></span>
     </div>
     <div class="grow">
       <button class="btn ghost" id="btnPreview">Xem kết quả</button>
+      <button class="btn save" id="btnSaveFile" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Lưu đè file đang mở
+      </button>
       <button class="btn" id="btnCopyQuick">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         Sao chép ini
@@ -814,7 +830,75 @@ document.getElementById("btnCopyQuick").addEventListener("click",function(){ cop
 document.getElementById("btnDownload").addEventListener("click",download);
 document.getElementById("btnDownloadModal").addEventListener("click",download);
 
-// theme sync from artifact host (data-theme on <html>)
+// ---- direct file access (Chrome File System Access API) ----
+var fileHandle=null, originalText=null;
+var inIframe=false; try{ inIframe = window.self!==window.top; }catch(e){ inIframe=true; }
+var fsOK = ("showOpenFilePicker" in window) && !inIframe;
+var btnOpen=document.getElementById("btnOpenFile");
+var btnSave=document.getElementById("btnSaveFile");
+var openName=document.getElementById("openName");
+if(fsOK){ btnOpen.hidden=false; }
+
+function mergeIntoOriginal(orig){
+  var line=buildLine();
+  if(!orig || !orig.trim()) return buildFile();
+  var idx=orig.indexOf("OptionSettings");
+  if(idx<0){
+    var m=orig.match(/\[\/Script\/Pal\.PalGameWorldSettings\][^\n]*\n?/);
+    if(m) return orig.replace(m[0], m[0].replace(/\n?$/,"\n")+line+"\n");
+    return orig.replace(/\s*$/,"")+"\n"+line+"\n";
+  }
+  var open=orig.indexOf("(", idx);
+  if(open<0) return orig.slice(0,idx)+line;
+  var depth=0,end=-1;
+  for(var p=open;p<orig.length;p++){ var c=orig[p]; if(c==="(")depth++; else if(c===")"){depth--; if(depth===0){end=p;break;}} }
+  if(end<0) return orig.slice(0,idx)+line;
+  return orig.slice(0,idx)+line+orig.slice(end+1);
+}
+
+btnOpen && btnOpen.addEventListener("click",function(){
+  (async function(){
+    try{
+      var picked=await window.showOpenFilePicker({
+        types:[{description:"Palworld settings",accept:{"text/plain":[".ini"]}}],
+        excludeAcceptAllOption:false, multiple:false
+      });
+      fileHandle=picked[0];
+      var f=await fileHandle.getFile();
+      originalText=await f.text();
+      var raw=parseIni(originalText);
+      var n=applyImport(raw); syncAll();
+      btnSave.hidden=false; openName.hidden=false; openName.textContent=fileHandle.name;
+      toast("Đã mở "+fileHandle.name+" · nạp "+n+" tham số");
+    }catch(ex){
+      if(ex && ex.name==="AbortError") return;
+      toast("Không mở được file: "+(ex && ex.message ? ex.message : ex));
+    }
+  })();
+});
+
+btnSave && btnSave.addEventListener("click",function(){
+  (async function(){
+    if(!fileHandle){ return; }
+    try{
+      if(fileHandle.queryPermission){
+        var q=await fileHandle.queryPermission({mode:"readwrite"});
+        if(q!=="granted"){
+          var r=await fileHandle.requestPermission({mode:"readwrite"});
+          if(r!=="granted"){ toast("Chưa được cấp quyền ghi file"); return; }
+        }
+      }
+      var text=mergeIntoOriginal(originalText);
+      var w=await fileHandle.createWritable();
+      await w.write(text); await w.close();
+      originalText=text;
+      toast("✓ Đã lưu đè "+fileHandle.name+" — nhớ restart container");
+    }catch(ex){
+      toast("Lưu thất bại: "+(ex && ex.message ? ex.message : ex));
+    }
+  })();
+});
+
 // init
 buildNav(); buildPresets(); load(); buildGroups();
 Object.keys(META).forEach(syncRow); syncSummary(); initSpy();
