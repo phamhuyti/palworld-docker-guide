@@ -34,7 +34,16 @@ Sau lần chạy đầu, sửa cấu hình tại `./Saved/Config/LinuxServer/Pal
 
 Yêu cầu server đã bật `RESTAPIEnabled=True` (và `RCONEnabled=True` nếu dùng RCON console) + `AdminPassword`. Máy chạy tool phải tới được server (cùng LAN, hoặc qua VPN).
 
-**Chạy tool** (Windows PowerShell) — bind ra LAN để điện thoại (qua VPN) truy cập:
+**Cách 1 — chạy như service Docker (khuyến nghị, luôn bật trên NAS).** Thêm service `palworld-admin` (đã có sẵn trong [compose.yaml](compose.yaml)) rồi tạo file `.env` cạnh compose:
+
+```bash
+cp .env.example .env      # rồi sửa PAL_ADMIN_PASSWORD = AdminPassword của bạn
+docker compose up -d      # server + admin-tool cùng chạy
+```
+
+Service này kết nối tới server qua tên `palworld-server` trên mạng nội bộ compose và mở web UI ở cổng `8080`.
+
+**Cách 2 — chạy trực tiếp bằng Python** (Windows PowerShell), bind ra LAN cho điện thoại (qua VPN) truy cập:
 
 ```powershell
 $env:PAL_HOST="192.168.1.160"       # IP server Palworld
@@ -44,7 +53,7 @@ $env:PAL_BIND="0.0.0.0"             # cho máy khác trong LAN/VPN truy cập
 python admin-tool.py
 ```
 
-Trên điện thoại: **vào VPN** → mở `http://<IP-LAN-máy-chạy-tool>:8080` bằng Chrome → đăng nhập → menu Chrome ⋮ → **"Thêm vào Màn hình chính"** để cài như app.
+Trên điện thoại (cả 2 cách): **vào VPN** → mở `http://<IP-LAN-host>:8080` bằng Chrome → đăng nhập → menu Chrome ⋮ → **"Thêm vào Màn hình chính"** để cài như app.
 
 **Bật HTTPS** (khuyến nghị — để cài PWA đầy đủ + mã hóa). Tạo cert tự ký rồi trỏ tới:
 

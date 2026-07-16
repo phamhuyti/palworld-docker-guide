@@ -40,3 +40,32 @@ services:
     volumes:
       - ./helper.sh:/pal/helper.sh:ro
       - ./Saved:/pal/Package/Pal/Saved   # Toàn bộ save + config nằm ở đây — backup thư mục này
+
+  # ------------------------------------------------------------------
+  # (TÙY CHỌN) Bảng điều khiển quản trị admin-tool.py chạy như một service.
+  # Cần: đặt PAL_ADMIN_PASSWORD trong file .env cạnh compose (xem .env.example),
+  #      và bật RESTAPIEnabled=True (+ RCONEnabled=True nếu dùng RCON console).
+  # Kết nối tới server qua TÊN SERVICE "palworld-server" (mạng nội bộ compose),
+  # nên KHÔNG cần đổi mục ports bind localhost ở trên.
+  # Dùng qua điện thoại: vào VPN rồi mở http://<IP-LAN-host>:8080 — xem README.
+  palworld-admin:
+    image: python:3.12-slim
+    container_name: palworld-admin
+    restart: unless-stopped
+    depends_on:
+      - palworld-server
+    environment:
+      PAL_HOST: palworld-server
+      PAL_REST_PORT: "8212"
+      PAL_RCON_PORT: "25575"
+      PAL_BIND: "0.0.0.0"
+      PAL_WEB_PORT: "8080"
+      PAL_ADMIN_PASSWORD: ${PAL_ADMIN_PASSWORD}   # AdminPassword server (từ .env)
+      PAL_APP_PASSWORD: ${PAL_APP_PASSWORD:-${PAL_ADMIN_PASSWORD}}  # mật khẩu đăng nhập app; mặc định dùng chung
+    volumes:
+      - ./admin-tool.py:/app/admin-tool.py:ro
+    command: ["python", "/app/admin-tool.py"]
+    ports:
+      # Đổi 0.0.0.0 thành IP LAN cụ thể (vd 192.168.1.160) để giới hạn chặt hơn.
+      # TUYỆT ĐỐI không port-forward cổng này ra Internet — chỉ dùng qua VPN.
+      - "8080:8080/tcp"

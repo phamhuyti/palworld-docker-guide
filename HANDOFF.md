@@ -16,7 +16,8 @@ Phân tích repo Docker **chính thức** của Pocketpair cho Palworld dedicate
 |---|---|---|
 | `HUONG-DAN-CONFIG.md` | Tài liệu chính: phân tích repo gốc, tham số dòng lệnh, **toàn bộ 119 thông số `PalWorldSettings.ini`** (11 nhóm, mỗi thông số có mặc định/phạm vi/giải thích), 4 bộ cấu hình mẫu, firewall/bảo mật, RCON/REST API, update/backup, mục **auto-update 3 cách** | ✅ Xong |
 | `HUONG-DAN-QUAN-TRI.md` | Quản trị bằng RCON & REST API: cách bật, bảng 11 endpoint REST + ví dụ curl, bảng lệnh RCON, lệnh admin trong game, kịch bản (kick/ban, restart báo trước, backup nóng, giám sát FPS), bảo mật/SSH tunnel | ✅ Xong |
-| `compose.yaml` | Mẫu chuẩn: tag `latest`, RCON/REST bind `127.0.0.1`, `stop_grace_period: 30s`, chú thích tiếng Việt | ✅ Xong |
+| `compose.yaml` | Mẫu chuẩn: tag `latest`, RCON/REST bind `127.0.0.1`, `stop_grace_period: 30s`, chú thích tiếng Việt. **Thêm service `palworld-admin`** (image python:3.12-slim, mount admin-tool.py, PAL_HOST=palworld-server qua mạng nội bộ compose, mở 8080, mật khẩu từ `${PAL_ADMIN_PASSWORD}`/`.env`) | ✅ Xong |
+| `.env.example` | Mẫu biến môi trường cho compose (PAL_ADMIN_PASSWORD, PAL_APP_PASSWORD tùy chọn). File `.env` thật đã gitignore | ✅ Xong |
 | `update.sh` | Auto-update giảm downtime: pull khi server còn chạy → so digest (không có bản mới thì thoát) → announce+save qua REST API (nếu điền `ADMIN_PASSWORD`) → down → backup tar → up | ✅ Xong |
 | `helper.sh` | Entrypoint nguyên bản từ repo gốc (chown Saved rồi exec PalServer.sh) | ✅ Xong |
 | `PalWorldSettings.ini.example` | Đủ 119 key với giá trị mặc định, hướng dẫn định dạng 2 dòng bắt buộc | ✅ Xong |

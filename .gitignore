@@ -8,6 +8,7 @@ __pycache__/
 *.local.*
 run-admin*.ps1
 run-admin*.sh
+.env
 
 # Backup save
 backup-*.tar.gz
