@@ -20,7 +20,8 @@ Phân tích repo Docker **chính thức** của Pocketpair cho Palworld dedicate
 | `update.sh` | Auto-update giảm downtime: pull khi server còn chạy → so digest (không có bản mới thì thoát) → announce+save qua REST API (nếu điền `ADMIN_PASSWORD`) → down → backup tar → up | ✅ Xong |
 | `helper.sh` | Entrypoint nguyên bản từ repo gốc (chown Saved rồi exec PalServer.sh) | ✅ Xong |
 | `PalWorldSettings.ini.example` | Đủ 119 key với giá trị mặc định, hướng dẫn định dạng 2 dòng bắt buộc | ✅ Xong |
-| `README.md` | Mục lục + chạy nhanh | ✅ Xong |
+| `config-editor.html` | **Web app chỉnh config trực quan** (standalone, offline): 119 tham số theo 11 nhóm, control theo kiểu (toggle/slider/dropdown/checkbox platform/password), note giải thích + cảnh báo ngoài phạm vi, badge "đã đổi", tìm kiếm, 5 preset, nhập file hiện tại (parse client-side, không nhúng mật khẩu), xuất `.ini` 2 dòng đúng thứ tự key CANON, tự lưu localStorage, light/dark. Cũng đã publish Artifact | ✅ Xong |
+| `README.md` | Mục lục + chạy nhanh (đã thêm dòng config-editor.html) | ✅ Xong |
 
 Lịch sử commit: `0e95884` (bộ tài liệu ban đầu) → `558c5f0` (mục auto-update) → `264f1ad` (quản trị RCON/REST + update.sh + bật port trong compose).
 

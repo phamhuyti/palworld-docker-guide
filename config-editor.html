@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palworld Config Editor — PalWorldSettings.ini</title>
+<meta name="description" content="Trình chỉnh cấu hình Palworld Dedicated Server trực quan: 119 tham số PalWorldSettings.ini có giải thích tiếng Việt, xuất ra file ini chuẩn.">
+<style>html,body{margin:0}img{max-width:100%}</style>
+</head>
+<body>
+<style>
+  :root{
+    --bg:#f4f6f3; --surface:#ffffff; --surface-2:#eef1ec; --surface-3:#e7ebe4;
+    --text:#1a2129; --muted:#5c6a72; --faint:#8a978f; --border:#dde3db;
+    --accent:#1f9c78; --accent-weak:#e2f1eb; --accent-ink:#0e5c46;
+    --warn:#b7770c; --warn-weak:#f6ecd6; --warn-line:#d99a2b;
+    --danger:#c0533b; --danger-weak:#f6e2dc;
+    --mono:ui-monospace,"SFMono-Regular","JetBrains Mono",Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --radius:12px; --radius-sm:8px;
+    --shadow:0 1px 2px rgba(20,30,25,.05),0 8px 24px -12px rgba(20,30,25,.18);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#12171a; --surface:#1a2126; --surface-2:#212a30; --surface-3:#28333a;
+      --text:#e8ece8; --muted:#9aa8a2; --faint:#6f7d77; --border:#2b353b;
+      --accent:#3fca9e; --accent-weak:#123028; --accent-ink:#8fe6cb;
+      --warn:#e0a53a; --warn-weak:#332a15; --warn-line:#a9781f;
+      --danger:#e07a60; --danger-weak:#3a201a;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f6f3; --surface:#ffffff; --surface-2:#eef1ec; --surface-3:#e7ebe4;
+    --text:#1a2129; --muted:#5c6a72; --faint:#8a978f; --border:#dde3db;
+    --accent:#1f9c78; --accent-weak:#e2f1eb; --accent-ink:#0e5c46;
+    --warn:#b7770c; --warn-weak:#f6ecd6; --warn-line:#d99a2b;
+    --danger:#c0533b; --danger-weak:#f6e2dc;
+    --shadow:0 1px 2px rgba(20,30,25,.05),0 8px 24px -12px rgba(20,30,25,.18);
+  }
+  :root[data-theme="dark"]{
+    --bg:#12171a; --surface:#1a2126; --surface-2:#212a30; --surface-3:#28333a;
+    --text:#e8ece8; --muted:#9aa8a2; --faint:#6f7d77; --border:#2b353b;
+    --accent:#3fca9e; --accent-weak:#123028; --accent-ink:#8fe6cb;
+    --warn:#e0a53a; --warn-weak:#332a15; --warn-line:#a9781f;
+    --danger:#e07a60; --danger-weak:#3a201a;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+    font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  button{font-family:inherit;cursor:pointer}
+  input,select{font-family:inherit}
+  a{color:var(--accent);text-underline-offset:2px}
+
+  /* ---- header ---- */
+  .topbar{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--surface) 88%,transparent);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--border);}
+  .topbar-in{max-width:1220px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:11px;margin-right:auto}
+  .glyph{width:34px;height:34px;border-radius:9px;background:linear-gradient(150deg,var(--accent),var(--accent-ink));
+    display:grid;place-items:center;color:#fff;font-weight:700;font-size:17px;flex:none;
+    box-shadow:0 2px 8px -2px color-mix(in srgb,var(--accent) 60%,transparent)}
+  .brand h1{font-size:16px;margin:0;letter-spacing:-.01em;font-weight:650}
+  .brand p{margin:0;font-size:11.5px;color:var(--muted);letter-spacing:.02em}
+  .changed-pill{font-size:12px;color:var(--warn);background:var(--warn-weak);
+    border:1px solid var(--warn-line);padding:3px 10px;border-radius:20px;font-weight:600;
+    display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+  .changed-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--warn-line)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{border:1px solid var(--border);background:var(--surface);color:var(--text);
+    padding:8px 13px;border-radius:var(--radius-sm);font-size:13px;font-weight:550;
+    display:inline-flex;align-items:center;gap:7px;transition:.14s;white-space:nowrap}
+  .btn:hover{background:var(--surface-2);border-color:var(--faint)}
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{filter:brightness(1.06)}
+  .btn.ghost{background:transparent}
+  .btn svg{width:15px;height:15px}
+
+  /* ---- shell ---- */
+  .shell{max-width:1220px;margin:0 auto;padding:22px 20px 120px;display:grid;
+    grid-template-columns:236px 1fr;gap:26px;align-items:start}
+  .rail{position:sticky;top:74px;display:flex;flex-direction:column;gap:14px;
+    max-height:calc(100vh - 94px);overflow:auto;padding-right:2px}
+  .search{position:relative}
+  .search input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--border);
+    background:var(--surface);color:var(--text);border-radius:var(--radius-sm);font-size:13.5px}
+  .search input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--faint)}
+  .navlist{display:flex;flex-direction:column;gap:1px}
+  .navlist a{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;
+    color:var(--muted);text-decoration:none;font-size:13px;font-weight:520;transition:.12s}
+  .navlist a:hover{background:var(--surface-2);color:var(--text)}
+  .navlist a.on{background:var(--accent-weak);color:var(--accent-ink);font-weight:620}
+  .navlist a .nc{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--warn);
+    background:var(--warn-weak);border-radius:20px;padding:1px 7px;min-width:20px;text-align:center;
+    font-variant-numeric:tabular-nums}
+  .navlist a .nc.zero{display:none}
+  .rail-note{font-size:11.5px;color:var(--faint);line-height:1.55;padding:2px 4px}
+
+  /* ---- content ---- */
+  .content{min-width:0;display:flex;flex-direction:column;gap:30px}
+  .intro{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px 18px;box-shadow:var(--shadow)}
+  .intro h2{margin:0 0 6px;font-size:15px}
+  .intro p{margin:0;font-size:13px;color:var(--muted)}
+  .presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .preset{border:1px solid var(--border);background:var(--surface-2);border-radius:20px;
+    padding:6px 13px;font-size:12.5px;font-weight:550;color:var(--text)}
+  .preset:hover{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-weak)}
+
+  .group{scroll-margin-top:80px}
+  .group-head{display:flex;align-items:baseline;gap:11px;margin-bottom:12px;
+    padding-bottom:8px;border-bottom:1px solid var(--border)}
+  .group-head h3{margin:0;font-size:16px;letter-spacing:-.01em;font-weight:640}
+  .group-head .gnum{font-family:var(--mono);font-size:11px;color:var(--accent);font-weight:700;
+    background:var(--accent-weak);border-radius:6px;padding:2px 7px}
+  .group-head .gdesc{font-size:12px;color:var(--muted);margin-left:auto;text-align:right;max-width:44ch}
+
+  .rows{display:flex;flex-direction:column;gap:9px}
+  .row{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:13px 15px;display:grid;grid-template-columns:1fr 260px;gap:14px 18px;align-items:center;
+    position:relative;transition:border-color .14s}
+  .row.changed{border-color:var(--warn-line)}
+  .row.changed::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;
+    border-radius:3px;background:var(--warn-line)}
+  .row.hidden{display:none}
+  .rmeta{min-width:0}
+  .rkey{font-family:var(--mono);font-size:13.5px;font-weight:600;color:var(--text);
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .rkey .tag{font-family:var(--sans);font-size:9.5px;font-weight:700;letter-spacing:.05em;
+    text-transform:uppercase;padding:2px 6px;border-radius:5px;background:var(--surface-3);color:var(--muted)}
+  .rkey .tag.pvp{background:var(--danger-weak);color:var(--danger)}
+  .rnote{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.5}
+  .rdefault{font-size:11px;color:var(--faint);margin-top:5px;font-family:var(--mono);
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .reset-field{border:none;background:none;color:var(--warn);font-size:11px;font-weight:600;
+    padding:0;text-decoration:underline;text-underline-offset:2px;display:none}
+  .row.changed .reset-field{display:inline}
+  .warn-range{color:var(--danger);font-weight:600}
+
+  .rctl{display:flex;flex-direction:column;gap:7px;align-items:stretch}
+  .num-wrap{display:flex;align-items:center;gap:9px}
+  input[type=number],input[type=text],input[type=password],select{
+    width:100%;padding:8px 10px;border:1px solid var(--border);background:var(--surface-2);
+    color:var(--text);border-radius:var(--radius-sm);font-size:13.5px;font-family:var(--mono)}
+  input[type=text],input[type=password]{font-family:var(--sans)}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .num-wrap input[type=number]{width:96px;flex:none;text-align:right;font-variant-numeric:tabular-nums}
+  input[type=range]{flex:1;accent-color:var(--accent);height:4px}
+  select{cursor:pointer}
+
+  /* toggle */
+  .toggle{display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none;
+    justify-content:flex-end}
+  .toggle input{position:absolute;opacity:0;width:0;height:0}
+  .track{width:42px;height:24px;border-radius:20px;background:var(--surface-3);
+    border:1px solid var(--border);position:relative;transition:.16s;flex:none}
+  .track::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:.16s}
+  .toggle input:checked + .track{background:var(--accent);border-color:var(--accent)}
+  .toggle input:checked + .track::after{transform:translateX(18px)}
+  .toggle input:focus-visible + .track{outline:2px solid var(--accent);outline-offset:2px}
+  .tstate{font-size:12.5px;font-weight:600;color:var(--muted);width:32px;text-align:left}
+  .toggle input:checked ~ .tstate{color:var(--accent-ink)}
+
+  /* platforms / checks */
+  .checks{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+  .chk{font-size:12px;font-weight:560;padding:6px 11px;border-radius:20px;border:1px solid var(--border);
+    background:var(--surface-2);color:var(--muted);cursor:pointer;user-select:none}
+  .chk.on{background:var(--accent-weak);border-color:var(--accent);color:var(--accent-ink)}
+  .chk input{display:none}
+
+  /* ---- output dock ---- */
+  .dock{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--surface);
+    border-top:1px solid var(--border);box-shadow:0 -8px 30px -18px rgba(0,0,0,.5)}
+  .dock-in{max-width:1220px;margin:0 auto;padding:11px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .dock .lbl{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:9px}
+  .dock .lbl b{color:var(--text);font-variant-numeric:tabular-nums}
+  .dock .grow{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+
+  /* ---- modal ---- */
+  .overlay{position:fixed;inset:0;z-index:60;background:rgba(10,15,12,.5);
+    display:none;align-items:center;justify-content:center;padding:20px}
+  .overlay.show{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    width:min(720px,100%);max-height:86vh;display:flex;flex-direction:column;box-shadow:var(--shadow)}
+  .modal-head{padding:15px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+  .modal-head h3{margin:0;font-size:15px}
+  .modal-head .x{margin-left:auto;border:none;background:var(--surface-2);width:30px;height:30px;
+    border-radius:7px;color:var(--muted);font-size:17px;line-height:1}
+  .modal-head .x:hover{background:var(--surface-3);color:var(--text)}
+  .modal-body{padding:16px 18px;overflow:auto}
+  .modal-body p{margin:0 0 11px;font-size:13px;color:var(--muted)}
+  .modal-body textarea{width:100%;min-height:150px;padding:12px;border:1px solid var(--border);
+    background:var(--surface-2);color:var(--text);border-radius:var(--radius-sm);
+    font-family:var(--mono);font-size:12px;line-height:1.55;resize:vertical}
+  .modal-body textarea:focus{outline:2px solid var(--accent);border-color:var(--accent)}
+  .code-out{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);
+    padding:13px;font-family:var(--mono);font-size:12px;line-height:1.6;white-space:pre-wrap;
+    word-break:break-all;max-height:38vh;overflow:auto;color:var(--text)}
+  .code-out .k{color:var(--accent-ink)}
+  .code-out .hl{background:var(--warn-weak);border-radius:3px;padding:0 2px;
+    box-shadow:inset 0 -1px 0 var(--warn-line)}
+  .modal-foot{padding:13px 18px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap}
+  .import-err{color:var(--danger);font-size:12.5px;font-weight:600;margin-top:9px;display:none}
+
+  .toast{position:fixed;bottom:78px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--text);color:var(--bg);padding:10px 18px;border-radius:22px;font-size:13px;
+    font-weight:600;opacity:0;pointer-events:none;transition:.22s;z-index:80;box-shadow:var(--shadow)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  @media (max-width:900px){
+    .shell{grid-template-columns:1fr;gap:16px}
+    .rail{position:static;max-height:none;flex-direction:column}
+    .navlist{flex-direction:row;flex-wrap:wrap;gap:6px}
+    .navlist a{border:1px solid var(--border)}
+    .row{grid-template-columns:1fr}
+    .rctl{align-items:stretch}
+    .toggle,.checks{justify-content:flex-start}
+    .group-head{flex-wrap:wrap}
+    .group-head .gdesc{margin-left:0;text-align:left;max-width:none}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <div class="glyph">P</div>
+      <div>
+        <h1>Palworld Config Editor</h1>
+        <p>PalWorldSettings.ini · bản 1.0 · 119 tham số</p>
+      </div>
+    </div>
+    <span class="changed-pill" id="changedPill" hidden><span id="changedCount">0</span> đã đổi</span>
+    <div class="actions">
+      <button class="btn ghost" id="btnImport" title="Dán nội dung file hiện tại để nạp vào">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Nhập file hiện tại
+      </button>
+      <button class="btn ghost" id="btnReset" title="Đưa tất cả về mặc định game">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.4 2.6L3 8"/><path d="M3 3v5h5"/></svg>
+        Đặt lại
+      </button>
+      <button class="btn primary" id="btnExport">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Xuất cấu hình
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="searchBox" type="text" placeholder="Tìm tham số / giải thích…" autocomplete="off">
+    </div>
+    <nav class="navlist" id="navlist"></nav>
+    <p class="rail-note">Sửa xong hãy <b>Xuất cấu hình</b> → dán/tải đè file <span style="font-family:var(--mono)">Saved/Config/LinuxServer/PalWorldSettings.ini</span> rồi <b>restart container</b> để áp dụng.</p>
+  </aside>
+
+  <main class="content" id="content">
+    <div class="intro">
+      <h2>Chỉnh cấu hình server trực quan</h2>
+      <p>Mỗi tham số có control phù hợp và note giải thích. Ô viền hổ phách = đang khác mặc định game. Bấm một preset để áp nhanh, hoặc nhập file hiện tại của bạn để chỉnh tiếp — mọi thứ xử lý ngay trong trình duyệt, không có gì được gửi đi.</p>
+      <div class="presets" id="presets"></div>
+    </div>
+  </main>
+</div>
+
+<div class="dock">
+  <div class="dock-in">
+    <div class="lbl">
+      <span>Tham số đã đổi khỏi mặc định: <b id="dockChanged">0</b> / <b>119</b></span>
+    </div>
+    <div class="grow">
+      <button class="btn ghost" id="btnPreview">Xem kết quả</button>
+      <button class="btn" id="btnCopyQuick">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Sao chép ini
+      </button>
+      <button class="btn primary" id="btnDownload">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Tải .ini
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- import modal -->
+<div class="overlay" id="importOverlay">
+  <div class="modal">
+    <div class="modal-head"><h3>Nhập file cấu hình hiện tại</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-body">
+      <p>Mở <span style="font-family:var(--mono);font-size:12px">Saved/Config/LinuxServer/PalWorldSettings.ini</span>, copy toàn bộ và dán vào đây. Có thể dán cả 2 dòng hoặc chỉ dòng <span style="font-family:var(--mono);font-size:12px">OptionSettings=(…)</span>.</p>
+      <textarea id="importText" placeholder="[/Script/Pal.PalGameWorldSettings]&#10;OptionSettings=(Difficulty=None,...)"></textarea>
+      <div class="import-err" id="importErr"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close>Hủy</button>
+      <button class="btn primary" id="btnDoImport">Nạp vào trình chỉnh</button>
+    </div>
+  </div>
+</div>
+
+<!-- export modal -->
+<div class="overlay" id="exportOverlay">
+  <div class="modal">
+    <div class="modal-head"><h3>Cấu hình xuất ra</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-body">
+      <p>Định dạng chuẩn 2 dòng — <b style="color:var(--warn)">tô vàng</b> là các giá trị khác mặc định. Dán đè toàn bộ file ini rồi restart container.</p>
+      <div class="code-out" id="codeOut"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close>Đóng</button>
+      <button class="btn" id="btnCopyModal">Sao chép</button>
+      <button class="btn primary" id="btnDownloadModal">Tải file .ini</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+// ---- parameter schema (t: b=bool i=int f=float e=enum s=string p=password pf=platforms raw=raw list) ----
+var GROUPS = [
+ {id:"server", n:"1", label:"Server & kết nối", desc:"Tên, mật khẩu, số slot, crossplay", items:[
+   {k:"ServerName",t:"s",def:"Default Palworld Server",note:"Tên server hiển thị trên danh sách."},
+   {k:"ServerDescription",t:"s",def:"",note:"Mô tả server."},
+   {k:"ServerPassword",t:"p",def:"",note:"Mật khẩu vào server (rỗng = ai cũng vào được)."},
+   {k:"AdminPassword",t:"p",def:"",note:"Mật khẩu admin — dùng cho RCON, REST API, lệnh /AdminPassword. Bắt buộc đặt nếu server công khai."},
+   {k:"ServerPlayerMaxNum",t:"i",def:32,min:1,max:512,note:"Số người chơi tối đa."},
+   {k:"CoopPlayerMaxNum",t:"i",def:4,min:1,max:4,note:"Số người tối đa trong phiên co-op (không áp dụng cho dedicated server)."},
+   {k:"PublicIP",t:"s",def:"",note:"IP công khai khai báo lên server list (để trống = tự phát hiện)."},
+   {k:"PublicPort",t:"i",def:8211,min:1024,max:65535,note:"Port công khai khai báo lên server list (không đổi port thực)."},
+   {k:"Region",t:"s",def:"",note:"Nhãn khu vực hiển thị trên server list."},
+   {k:"bUseAuth",t:"b",def:true,note:"Xác thực tài khoản khi kết nối. Luôn để bật (tắt cho phép giả mạo danh tính)."},
+   {k:"BanListURL",t:"s",def:"https://api.palworldgame.com/api/banlist.txt",note:"Nguồn danh sách ban toàn cục; có thể trỏ tới file riêng của bạn."},
+   {k:"bIsMultiplay",t:"b",def:false,note:"Bật chế độ multiplayer cho world (dedicated server tự xử lý — thường không cần đổi)."},
+   {k:"CrossplayPlatforms",t:"pf",def:["Steam","Xbox","PS5","Mac"],note:"Các nền tảng được phép kết nối. Bỏ bớt để giới hạn (ví dụ chỉ Steam)."},
+   {k:"bShowPlayerList",t:"b",def:false,note:"Hiện danh sách người chơi trên màn hình ESC của client."},
+   {k:"bIsShowJoinLeftMessage",t:"b",def:true,note:'Hiện thông báo "đã vào/rời server" trong chat.'},
+   {k:"bAllowClientMod",t:"b",def:true,note:"Cho phép client dùng mod. Tắt nếu muốn hạn chế gian lận."},
+ ]},
+ {id:"difficulty", n:"2", label:"Độ khó & Randomizer", desc:"Preset độ khó, xáo trộn spawn", items:[
+   {k:"Difficulty",t:"e",def:"None",opts:["None","Casual","Normal","Hard"],note:"Preset độ khó. None = tùy chỉnh bằng các thông số bên dưới. Đặt preset sẽ ghi đè nhiều rate."},
+   {k:"RandomizerType",t:"e",def:"None",opts:["None","Region","All"],note:"Xáo trộn vị trí spawn Pal: Region trộn trong vùng, All trộn toàn map."},
+   {k:"RandomizerSeed",t:"s",def:"",note:"Seed cho randomizer (cùng seed = cùng kết quả trộn)."},
+   {k:"bIsRandomizerPalLevelRandom",t:"b",def:false,note:"Random luôn cấp độ Pal khi bật randomizer."},
+ ]},
+ {id:"world", n:"3", label:"Thời gian, EXP & tài nguyên", desc:"Nhịp thế giới, tỉ lệ rơi & thu thập", items:[
+   {k:"DayTimeSpeedRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ trôi thời gian ban ngày (2 = ngày ngắn gấp đôi)."},
+   {k:"NightTimeSpeedRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ trôi thời gian ban đêm."},
+   {k:"ExpRate",t:"f",def:1,min:0,max:20,note:"Hệ số kinh nghiệm nhận được (người chơi + Pal)."},
+   {k:"WorkSpeedRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ làm việc tại base (craft, xây…)."},
+   {k:"PalEggDefaultHatchingTime",t:"f",def:72,min:0,max:240,step:1,note:"Số giờ thực để ấp trứng lớn nhất (0 = nở ngay). Bản 1.0 mặc định là 1."},
+   {k:"SupplyDropSpan",t:"i",def:180,min:0,max:1000,step:10,note:"Chu kỳ (phút) xuất hiện supply drop. 0 = tắt."},
+   {k:"EnemyDropItemRate",t:"f",def:1,min:0.5,max:5,note:"Hệ số vật phẩm rơi từ quái."},
+   {k:"CollectionDropRate",t:"f",def:1,min:0.5,max:5,note:"Hệ số vật phẩm thu thập (chặt cây, đập đá…)."},
+   {k:"CollectionObjectHpRate",t:"f",def:1,min:0.5,max:3,note:"Máu của vật thể thu thập. Giảm để chặt/đập nhanh hơn."},
+   {k:"CollectionObjectRespawnSpeedRate",t:"f",def:1,min:0.5,max:5,note:"Tốc độ hồi sinh vật thể thu thập (cao = mọc lại nhanh)."},
+   {k:"ItemWeightRate",t:"f",def:1,min:0.1,max:5,note:"Hệ số cân nặng vật phẩm (giảm để vác được nhiều hơn)."},
+   {k:"ItemCorruptionMultiplier",t:"f",def:1,min:0.1,max:10,note:"Hệ số tốc độ hỏng/ôi thiu của thực phẩm."},
+ ]},
+ {id:"pal", n:"4", label:"Pal & chiến đấu", desc:"Bắt, spawn, sát thương, raid boss", items:[
+   {k:"PalCaptureRate",t:"f",def:1,min:0.5,max:5,note:"Tỉ lệ bắt Pal thành công."},
+   {k:"PalSpawnNumRate",t:"f",def:1,min:0.5,max:5,note:"Mật độ Pal spawn ngoài map (tăng = đông hơn, tốn CPU hơn)."},
+   {k:"PalDamageRateAttack",t:"f",def:1,min:0.1,max:5,note:"Sát thương Pal GÂY RA."},
+   {k:"PalDamageRateDefense",t:"f",def:1,min:0.1,max:5,note:'Sát thương Pal NHẬN VÀO (tăng = Pal "giòn" hơn, giảm = Pal bền hơn).'},
+   {k:"PalStomachDecreaceRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ đói của Pal."},
+   {k:"PalStaminaDecreaceRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ tụt stamina của Pal."},
+   {k:"PalAutoHPRegeneRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ hồi máu tự nhiên của Pal."},
+   {k:"PalAutoHpRegeneRateInSleep",t:"f",def:1,min:0.1,max:5,note:"Tốc độ hồi máu của Pal khi ngủ (trong Palbox)."},
+   {k:"bEnableInvaderEnemy",t:"b",def:true,note:"Bật/tắt các đợt raid tấn công base."},
+   {k:"EnablePredatorBossPal",t:"b",def:true,note:"Bật/tắt Predator Pal (boss hung dữ ngoài map)."},
+   {k:"bActiveUNKO",t:"b",def:false,note:"Bật UNKO (vật phẩm 💩 joke item)."},
+   {k:"MonsterFarmActionSpeedRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ làm việc của Pal ở trang trại/ranch."},
+ ]},
+ {id:"player", n:"5", label:"Người chơi & sinh tồn", desc:"Sát thương, hồi phục, hình phạt chết, fast-travel", items:[
+   {k:"PlayerDamageRateAttack",t:"f",def:1,min:0.1,max:5,note:"Sát thương người chơi gây ra."},
+   {k:"PlayerDamageRateDefense",t:"f",def:1,min:0.1,max:5,note:"Sát thương người chơi nhận vào."},
+   {k:"PlayerStomachDecreaceRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ đói của người chơi."},
+   {k:"PlayerStaminaDecreaceRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ tụt stamina người chơi."},
+   {k:"PlayerAutoHPRegeneRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ hồi máu tự nhiên."},
+   {k:"PlayerAutoHpRegeneRateInSleep",t:"f",def:1,min:0.1,max:5,note:"Tốc độ hồi máu khi ngủ."},
+   {k:"DeathPenalty",t:"e",def:"All",opts:["None","Item","ItemAndEquipment","All"],note:"Hình phạt khi chết: None không rơi gì; Item rơi đồ trong túi (trừ trang bị); ItemAndEquipment rơi cả trang bị; All rơi cả Pal. Bản 1.0 mặc định là Item."},
+   {k:"bEnableNonLoginPenalty",t:"b",def:true,note:"Phạt người không đăng nhập lâu ngày (độ bền/thối đồ vẫn tính)."},
+   {k:"bEnableFastTravel",t:"b",def:true,note:"Cho phép dịch chuyển nhanh qua Great Eagle Statue."},
+   {k:"bEnableFastTravelOnlyBaseCamp",t:"b",def:false,note:"Chỉ cho fast-travel tới base camp (tăng độ khó)."},
+   {k:"bIsStartLocationSelectByMap",t:"b",def:true,note:"Cho người mới chọn điểm xuất phát trên map (tắt = spawn cố định). Bản 1.0 mặc định tắt."},
+   {k:"bExistPlayerAfterLogout",t:"b",def:false,note:"Nhân vật vẫn đứng trong world sau khi thoát game (có thể bị giết/cướp đồ — chỉ nên bật server hardcore PvP)."},
+   {k:"bEnableAimAssistPad",t:"b",def:true,note:"Hỗ trợ ngắm cho tay cầm."},
+   {k:"bEnableAimAssistKeyboard",t:"b",def:false,note:"Hỗ trợ ngắm cho chuột + bàn phím."},
+   {k:"EquipmentDurabilityDamageRate",t:"f",def:1,min:0.1,max:5,note:"Tốc độ hao độ bền trang bị."},
+   {k:"BlockRespawnTime",t:"f",def:5,min:0,max:60,step:1,note:"Thời gian (giây) chặn respawn sau khi chết."},
+   {k:"RespawnPenaltyDurationThreshold",t:"f",def:0,min:0,max:3600,step:10,note:"Ngưỡng (giây) kích hoạt phạt respawn khi chết liên tục (0 = tắt)."},
+   {k:"RespawnPenaltyTimeScale",t:"f",def:2,min:0,max:10,note:"Hệ số nhân thời gian chờ respawn mỗi lần chết liên tiếp."},
+   {k:"bAllowEnhanceStat_Health",t:"b",def:true,note:"Cho phép cộng điểm chỉ số HP khi lên cấp."},
+   {k:"bAllowEnhanceStat_Attack",t:"b",def:true,note:"Cho phép cộng điểm Attack."},
+   {k:"bAllowEnhanceStat_Stamina",t:"b",def:true,note:"Cho phép cộng điểm Stamina."},
+   {k:"bAllowEnhanceStat_Weight",t:"b",def:true,note:"Cho phép cộng điểm Weight (sức vác)."},
+   {k:"bAllowEnhanceStat_WorkSpeed",t:"b",def:true,note:"Cho phép cộng điểm Work Speed."},
+ ]},
+ {id:"build", n:"6", label:"Xây dựng & vật phẩm rơi", desc:"Máu công trình, giới hạn build, drop trên đất", items:[
+   {k:"BuildObjectHpRate",t:"f",def:1,min:0.5,max:5,note:"Máu công trình xây dựng."},
+   {k:"BuildObjectDamageRate",t:"f",def:1,min:0.5,max:3,note:"Sát thương công trình nhận vào (tăng = dễ phá)."},
+   {k:"BuildObjectDeteriorationDamageRate",t:"f",def:1,min:0,max:10,note:"Tốc độ mục nát tự nhiên của công trình ngoài vùng base (0 = không mục)."},
+   {k:"bBuildAreaLimit",t:"b",def:false,note:"Cấm xây sát các vị trí quan trọng (fast-travel, boss tower…)."},
+   {k:"MaxBuildingLimitNum",t:"i",def:0,min:0,max:8,note:"Giới hạn số công trình mỗi người chơi (0 = không giới hạn)."},
+   {k:"DropItemMaxNum",t:"i",def:3000,min:0,max:10000,step:100,note:"Số vật phẩm rơi tối đa tồn tại trong world (quá nhiều gây lag)."},
+   {k:"DropItemMaxNum_UNKO",t:"i",def:100,min:0,max:5000,step:10,note:"Giới hạn riêng cho UNKO."},
+   {k:"DropItemAliveMaxHours",t:"f",def:1,min:0,max:240,step:0.5,note:"Số giờ vật phẩm rơi tồn tại trước khi biến mất."},
+   {k:"PhysicsActiveDropItemMaxNum",t:"i",def:-1,min:-1,max:10000,step:50,note:"Số vật phẩm rơi có mô phỏng vật lý cùng lúc (-1 = không giới hạn; đặt thấp để giảm lag)."},
+   {k:"bEnableBuildingPlayerUIdDisplay",t:"b",def:false,note:"Hiện tên người xây trên công trình (tiện quản trị server đông)."},
+   {k:"BuildingNameDisplayCacheTTLSeconds",t:"i",def:60,min:1,max:3600,step:10,note:"TTL (giây) cache tên người xây hiển thị."},
+ ]},
+ {id:"guild", n:"7", label:"Base camp & Guild", desc:"Số base, worker, thành viên, chuyển chủ guild", items:[
+   {k:"BaseCampMaxNum",t:"i",def:128,min:0,max:10240,step:8,note:"Tổng số base camp tối đa toàn server."},
+   {k:"BaseCampMaxNumInGuild",t:"i",def:3,min:1,max:50,note:"Số base camp tối đa mỗi guild (tăng cẩn thận — ảnh hưởng hiệu năng mạnh)."},
+   {k:"BaseCampWorkerMaxNum",t:"i",def:15,min:1,max:50,note:"Số Pal làm việc tối đa mỗi base (tăng = nặng server đáng kể)."},
+   {k:"GuildPlayerMaxNum",t:"i",def:20,min:1,max:100,note:"Số thành viên tối đa mỗi guild."},
+   {k:"bAutoResetGuildNoOnlinePlayers",t:"b",def:false,note:"Tự xóa guild khi không ai online quá thời gian dưới đây (⚠️ mất base + đồ của guild)."},
+   {k:"AutoResetGuildTimeNoOnlinePlayers",t:"f",def:72,min:0,max:240,step:1,note:"Số giờ không online trước khi guild bị reset."},
+   {k:"GuildRejoinCooldownMinutes",t:"i",def:0,min:0,max:1440,step:5,note:"Thời gian chờ (phút) trước khi được gia nhập lại guild vừa rời (chống lách luật PvP)."},
+   {k:"AutoTransferMasterCheckIntervalSeconds",t:"f",def:3600,min:60,max:86400,step:60,note:"Chu kỳ (giây) kiểm tra guild master vắng mặt."},
+   {k:"AutoTransferMasterThresholdDays",t:"i",def:14,min:1,max:365,note:"Số ngày guild master không online thì tự chuyển quyền cho thành viên khác."},
+   {k:"bInvisibleOtherGuildBaseCampAreaFX",t:"b",def:false,note:"Ẩn hiệu ứng vòng sáng vùng base của guild khác."},
+   {k:"bEnableDefenseOtherGuildPlayer",t:"b",def:false,note:"Pal ở base tấn công người chơi guild khác đi vào vùng base."},
+   {k:"MaxGuildsPerFrame",t:"i",def:10,min:1,max:100,note:"Số guild xử lý mỗi frame (thông số hiệu năng — giữ mặc định)."},
+ ]},
+ {id:"pvp", n:"8", label:"PvP & Hardcore", desc:"Đối kháng người chơi, chết mất nhân vật/Pal", items:[
+   {k:"bIsPvP",t:"b",def:false,tag:"pvp",note:"Bật chế độ PvP toàn server."},
+   {k:"bEnablePlayerToPlayerDamage",t:"b",def:false,tag:"pvp",note:"Người chơi gây sát thương lẫn nhau (kể cả ngoài chế độ PvP)."},
+   {k:"bEnableFriendlyFire",t:"b",def:false,tag:"pvp",note:"Sát thương đồng đội (cùng guild)."},
+   {k:"bCanPickupOtherGuildDeathPenaltyDrop",t:"b",def:false,tag:"pvp",note:"Cho phép nhặt đồ rơi khi chết của người thuộc guild khác."},
+   {k:"bHardcore",t:"b",def:false,tag:"pvp",note:"Chế độ hardcore: chết là mất nhân vật."},
+   {k:"bPalLost",t:"b",def:false,tag:"pvp",note:"Pal chết là mất vĩnh viễn (permadeath cho Pal)."},
+   {k:"bCharacterRecreateInHardcore",t:"b",def:false,tag:"pvp",note:"Cho phép tạo lại nhân vật mới sau khi chết ở hardcore."},
+   {k:"bDisplayPvPItemNumOnWorldMap_BaseCamp",t:"b",def:false,tag:"pvp",note:"(PvP) Hiện số vật phẩm tại base camp lên world map."},
+   {k:"bDisplayPvPItemNumOnWorldMap_Player",t:"b",def:false,tag:"pvp",note:"(PvP) Hiện số vật phẩm người chơi mang theo lên world map."},
+   {k:"bAdditionalDropItemWhenPlayerKillingInPvPMode",t:"b",def:false,tag:"pvp",note:"(PvP) Rơi thêm vật phẩm đặc biệt khi giết người chơi."},
+   {k:"AdditionalDropItemWhenPlayerKillingInPvPMode",t:"s",def:"PlayerDropItem",tag:"pvp",note:"(PvP) Loại vật phẩm (ID) rơi thêm khi giết người."},
+   {k:"AdditionalDropItemNumWhenPlayerKillingInPvPMode",t:"i",def:1,min:0,max:100,tag:"pvp",note:"(PvP) Số lượng vật phẩm rơi thêm."},
+ ]},
+ {id:"chat", n:"9", label:"Chat & Voice", desc:"Giới hạn chat, proximity voice chat", items:[
+   {k:"ChatPostLimitPerMinute",t:"i",def:10,min:0,max:100,note:"Giới hạn số tin chat mỗi phút mỗi người (chống spam)."},
+   {k:"bEnableVoiceChat",t:"b",def:false,note:"Bật proximity voice chat tích hợp."},
+   {k:"VoiceChatMaxVolumeDistance",t:"f",def:3000,min:100,max:50000,step:100,note:"Khoảng cách (cm) còn nghe rõ 100% âm lượng."},
+   {k:"VoiceChatZeroVolumeDistance",t:"f",def:15000,min:100,max:50000,step:100,note:"Khoảng cách (cm) âm lượng về 0 (ngoài tầm không nghe)."},
+ ]},
+ {id:"rcon", n:"10", label:"RCON & REST API", desc:"Cổng quản trị từ xa", items:[
+   {k:"RCONEnabled",t:"b",def:false,note:"Bật RCON (điều khiển từ xa qua giao thức Source RCON)."},
+   {k:"RCONPort",t:"i",def:25575,min:1,max:65535,note:"Port TCP của RCON."},
+   {k:"RESTAPIEnabled",t:"b",def:false,note:"Bật REST API quản trị (khuyên dùng thay RCON)."},
+   {k:"RESTAPIPort",t:"i",def:8212,min:1,max:65535,note:"Port TCP của REST API."},
+ ]},
+ {id:"system", n:"11", label:"Lưu trữ, log & hiệu năng", desc:"Auto-save, backup, log, đồng bộ mạng", items:[
+   {k:"AutoSaveSpan",t:"f",def:30,min:30,max:3600,step:5,note:"Chu kỳ auto-save (giây)."},
+   {k:"bIsUseBackupSaveData",t:"b",def:true,note:"Tự tạo bản backup save (thư mục Saved/SaveGames/.../backup)."},
+   {k:"LogFormatType",t:"e",def:"Text",opts:["Text","Json"],note:"Định dạng log server (Json tiện cho log collector)."},
+   {k:"ServerReplicatePawnCullDistance",t:"f",def:15000,min:5000,max:15000,step:500,note:"Khoảng cách (cm) server đồng bộ pawn tới client. Giảm để nhẹ mạng/CPU, đổi lại Pal hiện muộn khi lại gần."},
+   {k:"ItemContainerForceMarkDirtyInterval",t:"f",def:1,min:0.1,max:10,note:"Chu kỳ (giây) đánh dấu đồng bộ container đồ — giữ mặc định."},
+   {k:"PlayerDataPalStorageUpdateCheckTickInterval",t:"f",def:1,min:0.1,max:60,step:0.5,note:"Chu kỳ (giây) kiểm tra cập nhật Pal storage của người chơi."},
+   {k:"bAllowGlobalPalboxExport",t:"b",def:true,note:"Cho phép xuất Pal lên Global Palbox (chuyển Pal giữa các server/world)."},
+   {k:"bAllowGlobalPalboxImport",t:"b",def:false,note:"Cho phép nhập Pal từ Global Palbox vào server (tắt để tránh tuồn Pal ngoài luồng)."},
+   {k:"DenyTechnologyList",t:"raw",def:"",note:'Danh sách công nghệ bị cấm mở khóa, phân cách phẩy (ví dụ cấm lồng bắt người: HumanCage).'},
+ ]},
+];
+
+// canonical order for the OptionSettings line (must match game's file order)
+var CANON = ("Difficulty,RandomizerType,RandomizerSeed,bIsRandomizerPalLevelRandom,DayTimeSpeedRate,NightTimeSpeedRate,ExpRate,PalCaptureRate,PalSpawnNumRate,PalDamageRateAttack,PalDamageRateDefense,PlayerDamageRateAttack,PlayerDamageRateDefense,PlayerStomachDecreaceRate,PlayerStaminaDecreaceRate,PlayerAutoHPRegeneRate,PlayerAutoHpRegeneRateInSleep,PalStomachDecreaceRate,PalStaminaDecreaceRate,PalAutoHPRegeneRate,PalAutoHpRegeneRateInSleep,BuildObjectHpRate,BuildObjectDamageRate,BuildObjectDeteriorationDamageRate,CollectionDropRate,CollectionObjectHpRate,CollectionObjectRespawnSpeedRate,EnemyDropItemRate,DeathPenalty,bEnablePlayerToPlayerDamage,bEnableFriendlyFire,bEnableInvaderEnemy,bActiveUNKO,bEnableAimAssistPad,bEnableAimAssistKeyboard,DropItemMaxNum,PhysicsActiveDropItemMaxNum,DropItemMaxNum_UNKO,BaseCampMaxNum,BaseCampWorkerMaxNum,DropItemAliveMaxHours,bAutoResetGuildNoOnlinePlayers,AutoResetGuildTimeNoOnlinePlayers,GuildPlayerMaxNum,BaseCampMaxNumInGuild,PalEggDefaultHatchingTime,WorkSpeedRate,AutoSaveSpan,bIsMultiplay,bIsPvP,bHardcore,bPalLost,bCharacterRecreateInHardcore,bCanPickupOtherGuildDeathPenaltyDrop,bEnableNonLoginPenalty,bEnableFastTravel,bEnableFastTravelOnlyBaseCamp,bIsStartLocationSelectByMap,bExistPlayerAfterLogout,bEnableDefenseOtherGuildPlayer,bInvisibleOtherGuildBaseCampAreaFX,bBuildAreaLimit,ItemWeightRate,CoopPlayerMaxNum,ServerPlayerMaxNum,ServerName,ServerDescription,AdminPassword,ServerPassword,bAllowClientMod,PublicPort,PublicIP,RCONEnabled,RCONPort,Region,bUseAuth,BanListURL,RESTAPIEnabled,RESTAPIPort,bShowPlayerList,ChatPostLimitPerMinute,CrossplayPlatforms,bIsUseBackupSaveData,LogFormatType,bIsShowJoinLeftMessage,SupplyDropSpan,EnablePredatorBossPal,MaxBuildingLimitNum,ServerReplicatePawnCullDistance,bAllowGlobalPalboxExport,bAllowGlobalPalboxImport,EquipmentDurabilityDamageRate,ItemContainerForceMarkDirtyInterval,PlayerDataPalStorageUpdateCheckTickInterval,ItemCorruptionMultiplier,MonsterFarmActionSpeedRate,DenyTechnologyList,GuildRejoinCooldownMinutes,AutoTransferMasterCheckIntervalSeconds,AutoTransferMasterThresholdDays,MaxGuildsPerFrame,BlockRespawnTime,RespawnPenaltyDurationThreshold,RespawnPenaltyTimeScale,bDisplayPvPItemNumOnWorldMap_BaseCamp,bDisplayPvPItemNumOnWorldMap_Player,AdditionalDropItemWhenPlayerKillingInPvPMode,AdditionalDropItemNumWhenPlayerKillingInPvPMode,bAdditionalDropItemWhenPlayerKillingInPvPMode,bEnableVoiceChat,VoiceChatMaxVolumeDistance,VoiceChatZeroVolumeDistance,bAllowEnhanceStat_Health,bAllowEnhanceStat_Attack,bAllowEnhanceStat_Stamina,bAllowEnhanceStat_Weight,bAllowEnhanceStat_WorkSpeed,bEnableBuildingPlayerUIdDisplay,BuildingNameDisplayCacheTTLSeconds").split(",");
+
+var PRESETS = [
+  {name:"↺ Mặc định game", d:{}},
+  {name:"👥 Co-op bạn bè", d:{ExpRate:2,PalCaptureRate:1.5,WorkSpeedRate:1.5,PalEggDefaultHatchingTime:1,DeathPenalty:"None",CollectionDropRate:2,EnemyDropItemRate:2,ServerPlayerMaxNum:8,bEnableInvaderEnemy:true}},
+  {name:"🌐 Public PvE", d:{ServerPlayerMaxNum:32,RESTAPIEnabled:true,bShowPlayerList:true,ChatPostLimitPerMinute:10,bAutoResetGuildNoOnlinePlayers:true,AutoResetGuildTimeNoOnlinePlayers:240,bBuildAreaLimit:true,bIsUseBackupSaveData:true}},
+  {name:"⚔️ PvP / Hardcore", d:{bIsPvP:true,bEnablePlayerToPlayerDamage:true,bCanPickupOtherGuildDeathPenaltyDrop:true,DeathPenalty:"All",bHardcore:true,bCharacterRecreateInHardcore:true,bEnableDefenseOtherGuildPlayer:true,GuildRejoinCooldownMinutes:60,bDisplayPvPItemNumOnWorldMap_Player:true,bAdditionalDropItemWhenPlayerKillingInPvPMode:true}},
+  {name:"🪶 Tối ưu server yếu", d:{DropItemMaxNum:1000,PhysicsActiveDropItemMaxNum:200,DropItemAliveMaxHours:0.5,ServerReplicatePawnCullDistance:10000,BaseCampMaxNumInGuild:3,AutoSaveSpan:60,bInvisibleOtherGuildBaseCampAreaFX:true}},
+];
+
+// ---- build lookup + state ----
+var DEF = {}, META = {};
+GROUPS.forEach(function(g){ g.items.forEach(function(it){ it.group=g.id; META[it.k]=it;
+  DEF[it.k] = (it.t==="pf") ? it.def.slice() : it.def; }); });
+var state = clone(DEF);
+
+function clone(o){ var r={}; for(var k in o){ r[k]=Array.isArray(o[k])?o[k].slice():o[k]; } return r; }
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+function isChanged(k){
+  var m=META[k], a=state[k], b=DEF[k];
+  if(m.t==="pf") return a.slice().sort().join(",")!==b.slice().sort().join(",");
+  if(m.t==="f") return Math.abs(Number(a)-Number(b))>1e-9;
+  return a!==b;
+}
+function fmtVal(k){
+  var m=META[k], v=state[k];
+  switch(m.t){
+    case "b": return v?"True":"False";
+    case "i": return String(Math.round(Number(v)));
+    case "f": return Number(v).toFixed(6);
+    case "e": return String(v);
+    case "s": case "p": return '"'+String(v)+'"';
+    case "pf": return "("+v.join(",")+")";
+    case "raw": return String(v);
+  }
+  return String(v);
+}
+
+// ---- render ----
+var content=document.getElementById("content");
+var navlist=document.getElementById("navlist");
+var rowEls={};
+
+function buildNav(){
+  navlist.innerHTML="";
+  GROUPS.forEach(function(g){
+    var a=document.createElement("a"); a.href="#g-"+g.id; a.dataset.g=g.id;
+    a.innerHTML='<span>'+esc(g.label)+'</span><span class="nc zero" data-nc="'+g.id+'">0</span>';
+    a.addEventListener("click",function(e){ e.preventDefault();
+      document.getElementById("g-"+g.id).scrollIntoView({behavior:"smooth",block:"start"}); });
+    navlist.appendChild(a);
+  });
+}
+function buildPresets(){
+  var wrap=document.getElementById("presets");
+  PRESETS.forEach(function(p){
+    var b=document.createElement("button"); b.className="preset"; b.textContent=p.name;
+    b.addEventListener("click",function(){ applyPreset(p); }); wrap.appendChild(b);
+  });
+}
+function applyPreset(p){
+  state=clone(DEF);
+  for(var k in p.d){ if(META[k]) state[k]= (META[k].t==="pf")? p.d[k].slice(): p.d[k]; }
+  syncAll(); toast(p.d && Object.keys(p.d).length? "Đã áp preset: "+p.name : "Đã đặt lại mặc định");
+}
+
+function buildGroups(){
+  GROUPS.forEach(function(g){
+    var sec=document.createElement("section"); sec.className="group"; sec.id="g-"+g.id;
+    var head=document.createElement("div"); head.className="group-head";
+    head.innerHTML='<span class="gnum">'+g.n+'</span><h3>'+esc(g.label)+'</h3><span class="gdesc">'+esc(g.desc)+'</span>';
+    sec.appendChild(head);
+    var rows=document.createElement("div"); rows.className="rows";
+    g.items.forEach(function(it){ rows.appendChild(buildRow(it)); });
+    sec.appendChild(rows); content.appendChild(sec);
+  });
+}
+
+function buildRow(it){
+  var row=document.createElement("div"); row.className="row"; row.dataset.k=it.k;
+  row.dataset.search=(it.k+" "+it.note).toLowerCase();
+  var meta=document.createElement("div"); meta.className="rmeta";
+  var tag = it.tag==="pvp" ? '<span class="tag pvp">PvP</span>' : "";
+  var defStr = defaultLabel(it);
+  meta.innerHTML='<div class="rkey"><span>'+esc(it.k)+'</span>'+tag+'</div>'+
+    '<div class="rnote">'+esc(it.note)+'</div>'+
+    '<div class="rdefault"><span>Mặc định: <b>'+esc(defStr)+'</b></span>'+
+    '<button class="reset-field" data-reset="'+it.k+'">đặt lại</button>'+
+    '<span class="warn-range" data-warn="'+it.k+'" style="display:none"></span></div>';
+  var ctl=document.createElement("div"); ctl.className="rctl";
+  ctl.appendChild(buildControl(it));
+  row.appendChild(meta); row.appendChild(ctl);
+  meta.querySelector('[data-reset]').addEventListener("click",function(){
+    state[it.k]= (it.t==="pf")? DEF[it.k].slice(): DEF[it.k]; syncRow(it.k); syncSummary();
+  });
+  rowEls[it.k]=row; return row;
+}
+function defaultLabel(it){
+  if(it.t==="b") return it.def?"Bật":"Tắt";
+  if(it.t==="f") return Number(it.def).toString();
+  if(it.t==="pf") return "("+it.def.join(",")+")";
+  if(it.t==="s"||it.t==="p") return it.def===""?"(trống)":it.def;
+  if(it.t==="raw") return it.def===""?"(trống)":it.def;
+  return String(it.def);
+}
+
+function buildControl(it){
+  var k=it.k, wrap=document.createElement("div"); wrap.style.width="100%";
+  if(it.t==="b"){
+    var lab=document.createElement("label"); lab.className="toggle";
+    var inp=document.createElement("input"); inp.type="checkbox"; inp.checked=!!state[k];
+    var tr=document.createElement("span"); tr.className="track";
+    var st=document.createElement("span"); st.className="tstate"; st.textContent=inp.checked?"Bật":"Tắt";
+    inp.addEventListener("change",function(){ state[k]=inp.checked; st.textContent=inp.checked?"Bật":"Tắt"; syncRow(k); syncSummary(); });
+    lab.appendChild(inp); lab.appendChild(tr); lab.appendChild(st); wrap.appendChild(lab);
+  } else if(it.t==="e"){
+    var sel=document.createElement("select");
+    it.opts.forEach(function(o){ var op=document.createElement("option"); op.value=o; op.textContent=o; if(o===state[k])op.selected=true; sel.appendChild(op); });
+    sel.addEventListener("change",function(){ state[k]=sel.value; syncRow(k); syncSummary(); });
+    wrap.appendChild(sel);
+  } else if(it.t==="pf"){
+    var box=document.createElement("div"); box.className="checks";
+    ["Steam","Xbox","PS5","Mac"].forEach(function(pl){
+      var lab=document.createElement("label"); lab.className="chk"; lab.textContent=pl;
+      var inp=document.createElement("input"); inp.type="checkbox"; inp.checked=state[k].indexOf(pl)>=0;
+      if(inp.checked) lab.classList.add("on");
+      inp.addEventListener("change",function(){
+        var arr=state[k].filter(function(x){return x!==pl;});
+        if(inp.checked) arr.push(pl);
+        // preserve canonical platform order
+        state[k]=["Steam","Xbox","PS5","Mac"].filter(function(x){return arr.indexOf(x)>=0;});
+        lab.classList.toggle("on",inp.checked); syncRow(k); syncSummary();
+      });
+      lab.insertBefore(inp,lab.firstChild); box.appendChild(lab);
+    });
+    wrap.appendChild(box);
+  } else if(it.t==="s"||it.t==="p"||it.t==="raw"){
+    var inp2=document.createElement("input"); inp2.type= it.t==="p"?"password":"text"; inp2.value=state[k];
+    if(it.t==="p"){ inp2.autocomplete="new-password"; inp2.placeholder="(để trống nếu không đặt)"; }
+    if(it.t==="raw"){ inp2.placeholder="ID1,ID2,… (trống = không cấm gì)"; inp2.style.fontFamily="var(--mono)"; }
+    inp2.addEventListener("input",function(){ state[k]=inp2.value; syncRow(k); syncSummary(); });
+    wrap.appendChild(inp2);
+  } else { // i / f
+    var box2=document.createElement("div"); box2.className="num-wrap";
+    var slider=null, hasSlider = it.t==="f" && typeof it.max==="number" && it.max<=20 && it.min>=0;
+    var step = it.step!=null ? it.step : (it.t==="f"?0.1:1);
+    if(hasSlider){
+      slider=document.createElement("input"); slider.type="range";
+      slider.min=it.min; slider.max=it.max; slider.step=step; slider.value=state[k];
+    }
+    var num=document.createElement("input"); num.type="number"; num.value=state[k];
+    if(it.min!=null)num.min=it.min; if(it.max!=null)num.max=it.max; num.step=step;
+    function commit(v,fromSlider){
+      var n=parseFloat(v); if(isNaN(n)){ return; }
+      if(it.t==="i") n=Math.round(n);
+      state[k]=n;
+      if(slider && !fromSlider && n>=it.min && n<=it.max) slider.value=n;
+      if(!fromSlider){} else num.value=n;
+      syncRow(k); syncSummary();
+    }
+    num.addEventListener("input",function(){ commit(num.value,false); });
+    if(slider){ slider.addEventListener("input",function(){ commit(slider.value,true); }); box2.appendChild(slider); }
+    box2.appendChild(num);
+    wrap.appendChild(box2);
+  }
+  return wrap;
+}
+
+// ---- sync ----
+function syncRow(k){
+  var row=rowEls[k]; if(!row) return;
+  var ch=isChanged(k); row.classList.toggle("changed",ch);
+  // range warn
+  var m=META[k], warn=row.querySelector('[data-warn]');
+  if((m.t==="i"||m.t==="f") && (m.min!=null||m.max!=null)){
+    var v=Number(state[k]), bad=(m.min!=null&&v<m.min)||(m.max!=null&&v>m.max);
+    if(bad){ warn.style.display="inline"; warn.textContent="⚠ ngoài khoảng khuyến nghị "+m.min+"–"+m.max; }
+    else warn.style.display="none";
+  }
+}
+function syncAll(){
+  // rebuild controls to reflect state fully (used after preset/import)
+  content.querySelectorAll(".group").forEach(function(n){n.remove()});
+  rowEls={}; buildGroups();
+  Object.keys(META).forEach(syncRow); syncSummary();
+}
+function syncSummary(){
+  var n=0; Object.keys(META).forEach(function(k){ if(isChanged(k))n++; });
+  document.getElementById("changedCount").textContent=n;
+  document.getElementById("changedPill").hidden = n===0;
+  document.getElementById("dockChanged").textContent=n;
+  // per-group counts
+  var per={}; GROUPS.forEach(function(g){per[g.id]=0;});
+  Object.keys(META).forEach(function(k){ if(isChanged(k)) per[META[k].group]++; });
+  navlist.querySelectorAll("[data-nc]").forEach(function(el){
+    var c=per[el.dataset.nc]||0; el.textContent=c; el.classList.toggle("zero",c===0);
+  });
+  save();
+}
+
+// ---- output ----
+function buildLine(){ return "OptionSettings=("+CANON.map(function(k){return k+"="+fmtVal(k);}).join(",")+")"; }
+function buildFile(){ return "[/Script/Pal.PalGameWorldSettings]\n"+buildLine(); }
+function buildHighlighted(){
+  var parts=CANON.map(function(k){
+    var seg=esc(k)+"="+esc(fmtVal(k));
+    return isChanged(k)? '<span class="hl">'+seg+'</span>' : seg;
+  });
+  return esc("[/Script/Pal.PalGameWorldSettings]")+"\n"+'<span class="k">OptionSettings</span>=('+parts.join(",")+")";
+}
+
+// ---- import ----
+function parseIni(text){
+  var i=text.indexOf("OptionSettings");
+  var open = i>=0 ? text.indexOf("(", i) : -1;
+  var inner;
+  if(open>=0){
+    var depth=0,end=-1;
+    for(var p=open;p<text.length;p++){ var c=text[p]; if(c==="(")depth++; else if(c===")"){depth--; if(depth===0){end=p;break;}} }
+    if(end<0) throw new Error("Thiếu dấu ) đóng của OptionSettings.");
+    inner=text.slice(open+1,end);
+  } else {
+    inner=text.trim(); // maybe they pasted just the inner list
+  }
+  // split by comma at depth 0
+  var out={},depth=0,cur="";
+  for(var q=0;q<inner.length;q++){
+    var ch=inner[q];
+    if(ch==="(")depth++; if(ch===")")depth--;
+    if(ch===","&&depth===0){ pushKV(out,cur); cur=""; } else cur+=ch;
+  }
+  if(cur.trim()) pushKV(out,cur);
+  if(Object.keys(out).length===0) throw new Error("Không tìm thấy tham số nào. Kiểm tra lại nội dung đã dán.");
+  return out;
+}
+function pushKV(out,seg){
+  var e=seg.indexOf("="); if(e<0) return;
+  var key=seg.slice(0,e).trim(), val=seg.slice(e+1).trim();
+  if(key) out[key]=val;
+}
+function applyImport(raw){
+  var applied=0;
+  Object.keys(raw).forEach(function(k){
+    if(!META[k]) return; var m=META[k], v=raw[k];
+    try{
+      if(m.t==="b") state[k]=/^true$/i.test(v);
+      else if(m.t==="i") state[k]=parseInt(v,10);
+      else if(m.t==="f") state[k]=parseFloat(v);
+      else if(m.t==="e") state[k]=stripQ(v);
+      else if(m.t==="s"||m.t==="p") state[k]=stripQ(v);
+      else if(m.t==="raw") state[k]=stripQ(v);
+      else if(m.t==="pf"){
+        var s=v.replace(/^\(|\)$/g,"");
+        state[k]= s.length? s.split(",").map(function(x){return x.trim();}).filter(Boolean) : [];
+      }
+      if(!isNaN(state[k])||typeof state[k]!=="number") applied++;
+    }catch(e){}
+  });
+  return applied;
+}
+function stripQ(v){ v=v.trim(); if(v.length>=2&&v[0]==='"'&&v[v.length-1]==='"') return v.slice(1,-1); return v; }
+
+// ---- persistence ----
+function save(){ try{ localStorage.setItem("palcfg", JSON.stringify(state)); }catch(e){} }
+function load(){ try{ var s=localStorage.getItem("palcfg"); if(s){ var o=JSON.parse(s);
+  Object.keys(o).forEach(function(k){ if(META[k]!=null) state[k]=o[k]; }); } }catch(e){} }
+
+// ---- misc ui ----
+var toastEl=document.getElementById("toast"),toastT;
+function toast(msg){ toastEl.textContent=msg; toastEl.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(function(){toastEl.classList.remove("show");},1900); }
+function copyText(t,msg){
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(function(){toast(msg||"Đã sao chép");},fallback); }
+  else fallback();
+  function fallback(){ var ta=document.createElement("textarea"); ta.value=t; document.body.appendChild(ta); ta.select();
+    try{document.execCommand("copy");toast(msg||"Đã sao chép");}catch(e){toast("Không sao chép được");} document.body.removeChild(ta); }
+}
+function download(){
+  var blob=new Blob([buildFile()],{type:"text/plain"}), url=URL.createObjectURL(blob);
+  var a=document.createElement("a"); a.href=url; a.download="PalWorldSettings.ini"; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url); toast("Đã tải PalWorldSettings.ini");
+}
+
+// scrollspy
+function initSpy(){
+  var links=Array.prototype.slice.call(navlist.querySelectorAll("a"));
+  var obs=new IntersectionObserver(function(ents){
+    ents.forEach(function(en){ if(en.isIntersecting){
+      var id=en.target.id.replace("g-","");
+      links.forEach(function(l){ l.classList.toggle("on", l.dataset.g===id); });
+    }});
+  },{rootMargin:"-40% 0px -55% 0px"});
+  GROUPS.forEach(function(g){ var el=document.getElementById("g-"+g.id); if(el)obs.observe(el); });
+}
+
+// search
+document.getElementById("searchBox").addEventListener("input",function(e){
+  var q=e.target.value.trim().toLowerCase();
+  GROUPS.forEach(function(g){
+    var sec=document.getElementById("g-"+g.id), any=false;
+    sec.querySelectorAll(".row").forEach(function(r){
+      var hit = !q || r.dataset.search.indexOf(q)>=0; r.classList.toggle("hidden",!hit); if(hit)any=true;
+    });
+    sec.style.display = any?"":"none";
+  });
+});
+
+// modal helpers
+function openM(id){ document.getElementById(id).classList.add("show"); }
+function closeM(el){ el.classList.remove("show"); }
+document.querySelectorAll("[data-close]").forEach(function(b){
+  b.addEventListener("click",function(){ closeM(b.closest(".overlay")); });
+});
+document.querySelectorAll(".overlay").forEach(function(o){
+  o.addEventListener("click",function(e){ if(e.target===o) closeM(o); });
+});
+document.addEventListener("keydown",function(e){ if(e.key==="Escape") document.querySelectorAll(".overlay.show").forEach(closeM); });
+
+// buttons
+document.getElementById("btnImport").addEventListener("click",function(){ openM("importOverlay"); document.getElementById("importErr").style.display="none"; document.getElementById("importText").focus(); });
+document.getElementById("btnDoImport").addEventListener("click",function(){
+  var t=document.getElementById("importText").value; var err=document.getElementById("importErr");
+  try{ var raw=parseIni(t); var n=applyImport(raw); syncAll(); closeM(document.getElementById("importOverlay"));
+    document.getElementById("importText").value=""; toast("Đã nạp "+n+" tham số từ file");
+  }catch(ex){ err.textContent=ex.message; err.style.display="block"; }
+});
+document.getElementById("btnReset").addEventListener("click",function(){
+  if(confirm("Đặt lại TẤT CẢ tham số về mặc định game?")){ state=clone(DEF); syncAll(); toast("Đã đặt lại mặc định"); }
+});
+function openExport(){
+  document.getElementById("codeOut").innerHTML=buildHighlighted(); openM("exportOverlay");
+}
+document.getElementById("btnExport").addEventListener("click",openExport);
+document.getElementById("btnPreview").addEventListener("click",openExport);
+document.getElementById("btnCopyModal").addEventListener("click",function(){ copyText(buildFile(),"Đã sao chép cấu hình"); });
+document.getElementById("btnCopyQuick").addEventListener("click",function(){ copyText(buildFile(),"Đã sao chép cấu hình"); });
+document.getElementById("btnDownload").addEventListener("click",download);
+document.getElementById("btnDownloadModal").addEventListener("click",download);
+
+// theme sync from artifact host (data-theme on <html>)
+// init
+buildNav(); buildPresets(); load(); buildGroups();
+Object.keys(META).forEach(syncRow); syncSummary(); initSpy();
+})();
+</script>
+</body>
+</html>
