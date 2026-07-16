@@ -157,6 +157,87 @@ def rcon(command):
     except Exception as e:
         return 0, "RCON lỗi: %s" % e
 
+# ---------------------------------------------------------------- đếm ngược + spam thông báo
+_CD_LOCK = threading.Lock()
+_CD = {"active": False, "mode": None, "ends": 0.0, "cancel": None}
+
+def _fmt_remain(sec):
+    sec = int(round(sec))
+    if sec >= 60:
+        m, s = divmod(sec, 60)
+        return "%d phut%s" % (m, (" %d giay" % s if s else ""))
+    return "%d giay" % sec
+
+def countdown_status():
+    with _CD_LOCK:
+        if not _CD["active"]:
+            return {"active": False}
+        return {"active": True, "mode": _CD["mode"],
+                "remaining": max(0, int(round(_CD["ends"] - time.time())))}
+
+def cancel_countdown():
+    with _CD_LOCK:
+        if not _CD["active"] or not _CD["cancel"]:
+            return False, "Không có đếm ngược nào đang chạy"
+        _CD["cancel"].set()
+    return True, "Đã yêu cầu hủy đếm ngược"
+
+def start_countdown(minutes, mode, message):
+    total = int(round(float(minutes) * 60))
+    if total < 5:
+        total = 5
+    if total > 3600:
+        total = 3600
+    mode = "shutdown" if mode == "shutdown" else "restart"
+    with _CD_LOCK:
+        if _CD["active"]:
+            return False, "Đang có đếm ngược khác chạy — hủy trước đã"
+        cancel = threading.Event()
+        _CD.update(active=True, mode=mode, ends=time.time() + total, cancel=cancel)
+    t = threading.Thread(target=_countdown_worker,
+                         args=(total, mode, (message or "").strip(), cancel), daemon=True)
+    t.start()
+    return True, "Bắt đầu đếm ngược %s, spam thông báo tới người chơi" % _fmt_remain(total)
+
+def _countdown_done():
+    with _CD_LOCK:
+        _CD.update(active=False, mode=None, ends=0.0, cancel=None)
+
+def _countdown_worker(total, mode, custom, cancel):
+    verb = "khoi dong lai" if mode == "restart" else "tat"
+    ends = time.time() + total
+    # các mốc còn lại (giây) — dày dần về cuối để "spam"
+    points = set(m * 60 for m in range(1, total // 60 + 1))
+    points.update(p for p in (30, 10, 5, 4, 3, 2, 1) if p <= total)
+    for p in sorted(points, reverse=True):
+        while True:
+            if cancel.is_set():
+                rest("POST", "/announce", {"message": "[SERVER] Da HUY lenh %s. Server tiep tuc binh thuong." % verb})
+                _countdown_done(); return
+            remain = ends - time.time()
+            if remain <= p:
+                break
+            time.sleep(min(1.0, max(0.05, remain - p)))
+        if custom:
+            msg = "[SERVER] %s (con %s)" % (custom, _fmt_remain(p))
+        else:
+            msg = "[SERVER] Server se %s sau %s! Hay ket thuc viec dang lam va tim noi an toan." % (verb, _fmt_remain(p))
+        rest("POST", "/announce", {"message": msg})
+    # chờ về 0
+    while ends - time.time() > 0.1:
+        if cancel.is_set():
+            rest("POST", "/announce", {"message": "[SERVER] Da HUY lenh %s." % verb})
+            _countdown_done(); return
+        time.sleep(0.1)
+    if cancel.is_set():
+        _countdown_done(); return
+    # thực thi: save rồi shutdown (docker restart:unless-stopped -> server tu bat lai)
+    rest("POST", "/announce", {"message": "[SERVER] Server %s ngay bay gio!" % verb})
+    rest("POST", "/save")
+    time.sleep(1)
+    rest("POST", "/shutdown", {"waittime": 1, "message": "Server %s" % verb})
+    _countdown_done()
+
 # ---------------------------------------------------------------- routes
 def _wrap(status, raw):
     ok = 200 <= status < 300
@@ -173,6 +254,8 @@ def route(method, path, payload):
         if path == "/api/players":  return _wrap(*rest("GET", "/players"))
         if path == "/api/metrics":  return _wrap(*rest("GET", "/metrics"))
         if path == "/api/settings": return _wrap(*rest("GET", "/settings"))
+        if path == "/api/countdown_status":
+            return 200, json.dumps({"ok": True, "status": 200, "data": countdown_status(), "text": None})
     if method == "POST":
         p = payload or {}
         if path == "/api/announce":
@@ -194,6 +277,12 @@ def route(method, path, payload):
             return _wrap(*rest("POST", "/unban", {"userid": p.get("userid", "")}))
         if path == "/api/rcon":
             return _wrap(*rcon(p.get("command", "")))
+        if path == "/api/countdown":
+            ok, msg = start_countdown(p.get("minutes", 5), p.get("mode", "restart"), p.get("message", ""))
+            return 200, json.dumps({"ok": ok, "status": 200 if ok else 409, "data": None, "text": msg})
+        if path == "/api/countdown_cancel":
+            ok, msg = cancel_countdown()
+            return 200, json.dumps({"ok": ok, "status": 200 if ok else 409, "data": None, "text": msg})
     return 404, json.dumps({"ok": False, "error": "route không tồn tại"})
 
 # ---------------------------------------------------------------- PWA icon (PNG tự vẽ chữ P)
@@ -485,7 +574,13 @@ label{font-size:12px;color:var(--muted);font-weight:600;display:block;margin:0 0
 input[type=text],input[type=number],textarea{width:100%;padding:11px;border:1px solid var(--border);
   background:var(--surface-2);color:var(--text);border-radius:9px;font-size:15px}
 textarea{resize:vertical;min-height:56px}
-input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+select{width:100%;padding:11px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);border-radius:9px;font-size:14px;cursor:pointer}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+.cd-banner{margin-top:12px;padding:11px 13px;border-radius:10px;border:1px solid var(--warn);
+  background:var(--warn-weak);display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:600;color:var(--warn)}
+.cd-banner b{font-variant-numeric:tabular-nums}
+.cd-banner .btn{margin-left:auto}
+.divider{border-top:1px solid var(--border);margin:14px 0 0;padding-top:12px}
 .row{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end}
 .row>div{flex:1;min-width:90px}
 .btn{border:1px solid var(--border);background:var(--surface);color:var(--text);padding:11px 15px;
@@ -550,7 +645,27 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
       <button class="btn danger" id="btnShutdown">Shutdown</button>
       <button class="btn danger" id="btnStop">Stop (ngay)</button>
     </div>
-    <p class="hint">Nút đỏ bấm 2 lần để xác nhận.</p>
+    <p class="hint">Tắt ngay, không báo trước. Nút đỏ bấm 2 lần để xác nhận.</p>
+    <div class="divider">
+      <label>Đếm ngược có spam thông báo</label>
+      <div class="row">
+        <div style="flex:0 0 110px"><input type="number" id="cdMin" value="5" min="1" max="60" title="Số phút"></div>
+        <div><select id="cdMode">
+          <option value="restart">Khởi động lại</option>
+          <option value="shutdown">Tắt server</option>
+        </select></div>
+      </div>
+      <input type="text" id="cdMsg" placeholder="(tùy chọn) lời nhắn riêng thay mặc định" style="margin-top:9px">
+      <div class="row" style="margin-top:9px">
+        <button class="btn danger" id="btnCountdown">Bắt đầu đếm ngược</button>
+      </div>
+      <div class="cd-banner" id="cdBanner" hidden>
+        <span>⏳ Đang đếm ngược: <b id="cdRemain">–</b></span>
+        <button class="btn sm" id="btnCdCancel">Hủy</button>
+      </div>
+      <p class="hint">Spam thông báo cho người chơi mỗi phút → 30s → 10s → 5..1s rồi tự save & tắt.
+        Với <span style="font-family:var(--mono)">restart: unless-stopped</span>, server tự bật lại (= restart).</p>
+    </div>
   </section>
   <section class="card">
     <h2>Gỡ ban</h2>
@@ -662,8 +777,20 @@ $("#btnRefresh").onclick=refreshPlayers;
 $("#btnClear").onclick=function(){$("#log").innerHTML='<div class="empty">Chưa có hoạt động.</div>';};
 $("#btnLogout").onclick=function(){location.href="/logout";};
 if(__ENFORCE__)$("#btnLogout").hidden=false;
-refreshStatus();refreshPlayers();
-setInterval(refreshStatus,6000);setInterval(refreshPlayers,10000);
+function fmtRemain(s){s=parseInt(s||0,10);if(s>=60){var m=Math.floor(s/60),ss=s%60;return m+" phút"+(ss?(" "+ss+"s"):"");}return s+" giây";}
+async function pollCountdown(){
+  try{var r=await call("GET","/api/countdown_status");var s=(r&&r.data)||{};var b=$("#cdBanner");
+    if(s.active){b.hidden=false;$("#cdRemain").textContent=fmtRemain(s.remaining)+" · "+(s.mode==="restart"?"khởi động lại":"tắt");}
+    else b.hidden=true;
+  }catch(e){}
+}
+$("#btnCountdown").onclick=function(){arm(this,async function(){
+  var r=await call("POST","/api/countdown",{minutes:parseInt($("#cdMin").value||"5",10),mode:$("#cdMode").value,message:$("#cdMsg").value.trim()});
+  report("đếm ngược "+($("#cdMode").value==="restart"?"restart":"shutdown"),r);pollCountdown();
+});};
+$("#btnCdCancel").onclick=async function(){report("hủy đếm ngược",await call("POST","/api/countdown_cancel",{}));pollCountdown();};
+refreshStatus();refreshPlayers();pollCountdown();
+setInterval(refreshStatus,6000);setInterval(refreshPlayers,10000);setInterval(pollCountdown,2000);
 </script></body></html>"""
 PAGE = PAGE.replace("__ENFORCE__", "true" if ENFORCE_AUTH else "false")
 
