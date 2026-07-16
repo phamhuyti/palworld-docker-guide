@@ -1,53 +1,30 @@
-# Palworld Dedicated Server — bản mẫu dựa trên compose.yaml chính thức của Pocketpair
-# https://github.com/pocketpairjp/palworld-dedicated-server-docker
-#
-# Chạy:    docker compose up -d
-# Log:     docker compose logs -f
-# Dừng:    docker compose down
-#
-# Cấu hình game: sửa ./Saved/Config/LinuxServer/PalWorldSettings.ini (sinh ra sau lần chạy đầu)
-# rồi docker compose restart. Chi tiết mọi thông số: xem HUONG-DAN-CONFIG.md
-
+# Đây là bản compose.yaml THẬT đang chạy trên NAS của tôi (nhánh `nas-deployment`),
+# khác với nhánh `main` (bản template chung dùng bind 127.0.0.1 cho người khác đọc
+# theo hướng dẫn). IP LAN dưới đây (192.168.1.160) là địa chỉ nội bộ mạng nhà tôi —
+# chỉ truy cập được trong LAN/VPN, không có ý nghĩa gì nếu đứng ngoài mạng đó.
 services:
   palworld-server:
-    # Danh sách tag: https://github.com/pocketpairjp/palworld-dedicated-server-docker/pkgs/container/palserver
-    # Tag phải KHỚP phiên bản game của client.
-    # "latest" dùng kèm auto-update qua update.sh (xem HUONG-DAN-CONFIG.md mục 12).
-    # Muốn tự kiểm soát thời điểm update thì pin cứng, ví dụ:
-    #   image: ghcr.io/pocketpairjp/palserver:v1.0.1.100619
     image: ghcr.io/pocketpairjp/palserver:latest
     container_name: palworld-server
     restart: unless-stopped
-    # Cho server thời gian save khi dừng container (tránh mất dữ liệu)
     stop_grace_period: 30s
     entrypoint: /pal/helper.sh
-    # Tham số dòng lệnh: https://tech.palworldgame.com/settings-and-operation/arguments
     command:
-      - -port=8211              # Port UDP; đổi thì phải đổi cả mục ports bên dưới
-      - -useperfthreads         # 3 flag hiệu năng — nên giữ nguyên
-      - -NoAsyncLoadingThread
-      - -UseMultithreadForDS
-      # - -publiclobby          # Bật nếu muốn hiện trên community server list
-      # - -publicip=1.2.3.4     # IP công khai (cần khi server sau NAT)
-      # - -logformat=json       # Log dạng JSON cho log collector
+      - "-port=8211"
+      - "-useperfthreads"
+      - "-NoAsyncLoadingThread"
+      - "-UseMultithreadForDS"
     ports:
-      - "8211:8211/udp"
-      # RCON/REST API chỉ bind localhost — KHÔNG expose ra Internet.
-      # Cần bật trong PalWorldSettings.ini: RCONEnabled=True, RESTAPIEnabled=True,
-      # AdminPassword="..." — xem HUONG-DAN-QUAN-TRI.md
-      - "127.0.0.1:25575:25575/tcp"   # RCON
-      - "127.0.0.1:8212:8212/tcp"     # REST API
+      - "192.168.1.160:8211:8211/udp"
+      - "192.168.1.160:25575:25575/tcp"   # RCON — chỉ LAN truy cập được, không lộ ra Internet
+      - "192.168.1.160:8212:8212/tcp"     # REST API — chỉ LAN truy cập được, không lộ ra Internet
     volumes:
       - ./helper.sh:/pal/helper.sh:ro
-      - ./Saved:/pal/Package/Pal/Saved   # Toàn bộ save + config nằm ở đây — backup thư mục này
+      - ./Saved:/pal/Package/Pal/Saved
 
-  # ------------------------------------------------------------------
-  # (TÙY CHỌN) Bảng điều khiển quản trị admin-tool.py chạy như một service.
-  # Cần: đặt PAL_ADMIN_PASSWORD trong file .env cạnh compose (xem .env.example),
-  #      và bật RESTAPIEnabled=True (+ RCONEnabled=True nếu dùng RCON console).
-  # Kết nối tới server qua TÊN SERVICE "palworld-server" (mạng nội bộ compose),
-  # nên KHÔNG cần đổi mục ports bind localhost ở trên.
-  # Dùng qua điện thoại: vào VPN rồi mở http://<IP-LAN-host>:8080 — xem README.
+  # Bảng điều khiển quản trị (PWA). Vào VPN rồi mở http://192.168.1.160:8080
+  # Yêu cầu server bật RESTAPIEnabled=True (và RCONEnabled=True cho RCON console).
+  # Mật khẩu lấy từ file .env cạnh compose (PAL_ADMIN_PASSWORD).
   palworld-admin:
     image: python:3.12-slim
     container_name: palworld-admin
@@ -55,19 +32,17 @@ services:
     depends_on:
       - palworld-server
     environment:
-      PAL_HOST: palworld-server
+      PAL_HOST: palworld-server      # gọi tới server qua tên service (mạng nội bộ compose)
       PAL_REST_PORT: "8212"
       PAL_RCON_PORT: "25575"
-      PAL_BIND: "0.0.0.0"
+      PAL_BIND: "0.0.0.0"            # bind mọi interface trong container; host chỉ mở ở IP LAN bên dưới
       PAL_WEB_PORT: "8080"
-      PAL_ADMIN_PASSWORD: ${PAL_ADMIN_PASSWORD}   # AdminPassword server (từ .env)
-      PAL_APP_PASSWORD: ${PAL_APP_PASSWORD:-${PAL_ADMIN_PASSWORD}}  # mật khẩu đăng nhập app; mặc định dùng chung
+      PAL_ADMIN_PASSWORD: ${PAL_ADMIN_PASSWORD}   # AdminPassword server (REST/RCON)
+      PAL_APP_PASSWORD: ${PAL_ADMIN_PASSWORD}     # mật khẩu đăng nhập app (dùng chung theo lựa chọn)
       PAL_CONFIG_PATH: "/pal/Config/LinuxServer/PalWorldSettings.ini"
     volumes:
       - ./admin-tool.py:/app/admin-tool.py:ro
       - ./Saved/Config/LinuxServer:/pal/Config/LinuxServer   # đọc/ghi PalWorldSettings.ini trực tiếp qua trang /config
     command: ["python", "/app/admin-tool.py"]
     ports:
-      # Đổi 0.0.0.0 thành IP LAN cụ thể (vd 192.168.1.160) để giới hạn chặt hơn.
-      # TUYỆT ĐỐI không port-forward cổng này ra Internet — chỉ dùng qua VPN.
-      - "8080:8080/tcp"
+      - "192.168.1.160:8080:8080/tcp"   # chỉ LAN/VPN — KHÔNG port-forward ra Internet
