@@ -62,8 +62,10 @@ services:
       PAL_WEB_PORT: "8080"
       PAL_ADMIN_PASSWORD: ${PAL_ADMIN_PASSWORD}   # AdminPassword server (từ .env)
       PAL_APP_PASSWORD: ${PAL_APP_PASSWORD:-${PAL_ADMIN_PASSWORD}}  # mật khẩu đăng nhập app; mặc định dùng chung
+      PAL_CONFIG_PATH: "/pal/Config/LinuxServer/PalWorldSettings.ini"
     volumes:
       - ./admin-tool.py:/app/admin-tool.py:ro
+      - ./Saved/Config/LinuxServer:/pal/Config/LinuxServer   # đọc/ghi PalWorldSettings.ini trực tiếp qua trang /config
     command: ["python", "/app/admin-tool.py"]
     ports:
       # Đổi 0.0.0.0 thành IP LAN cụ thể (vd 192.168.1.160) để giới hạn chặt hơn.
