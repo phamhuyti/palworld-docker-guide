@@ -263,9 +263,11 @@ def route(method, path, payload):
         if path == "/api/save":
             return _wrap(*rest("POST", "/save"))
         if path == "/api/shutdown":
+            rest("POST", "/save")   # lưu trước cho chắc (server cũng autosave khi tắt êm)
             return _wrap(*rest("POST", "/shutdown",
                    {"waittime": int(p.get("waittime", 30)), "message": p.get("message", "")}))
         if path == "/api/stop":
+            rest("POST", "/save")   # Stop tắt gấp -> bắt buộc lưu trước
             return _wrap(*rest("POST", "/stop"))
         if path == "/api/kick":
             return _wrap(*rest("POST", "/kick",
@@ -645,7 +647,7 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
       <button class="btn danger" id="btnShutdown">Shutdown</button>
       <button class="btn danger" id="btnStop">Stop (ngay)</button>
     </div>
-    <p class="hint">Tắt ngay, không báo trước. Nút đỏ bấm 2 lần để xác nhận.</p>
+    <p class="hint">Tự động Save trước khi tắt. Shutdown có đếm giờ + báo trước; Stop tắt ngay. Nút đỏ bấm 2 lần để xác nhận.</p>
     <div class="divider">
       <label>Đếm ngược có spam thông báo</label>
       <div class="row">
