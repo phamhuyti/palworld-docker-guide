@@ -53,6 +53,7 @@ Lịch sử commit chính: `0e95884` (tài liệu ban đầu) → `558c5f0` (aut
   - **Service mới `palworld-savepal`** trong compose thật trên NAS: build từ clone fork (`context: ../palworld-save-pal`, arg `PUBLIC_WS_URL=192.168.1.160:5174/ws`), bind `192.168.1.160:5174` (chỉ LAN/VPN, **không có đăng nhập** — đã chốt chấp nhận), env `PSP_SAVES_DIR=/saves`, mount `./Saved/SaveGames:/saves` (đọc/ghi) + `./savepal-db:/app/db`. **KHÔNG mount docker.sock** (đã chốt bỏ tính năng quản lý server của Save Pal). Đã build, chạy, kiểm chứng: `/api/local-saves` trả đúng world thật ("Autosave_W", id `A8FA00352DE24A1E9267A25FB999BA7B`).
   - `admin-tool.py` bản deploy thật: thêm nút **"Sửa save"** (mở `http://192.168.1.160:5174` tab mới) cạnh nút "Cấu hình", bump SW cache `v6`. Thay đổi này trỏ IP LAN cứng → chỉ commit vào nhánh `nas-deployment`, KHÔNG vào `main`.
   - **Quy trình dùng an toàn:** dừng `palworld-server` trước khi LƯU save trong Save Pal (server đang chạy sẽ ghi đè), lưu xong start lại.
+  - **Back-port về `main` (`c6011ed`):** các cải tiến đã chạy thật trên NAS nhưng chưa từng vào repo — `helper.sh` bắt exit code + marker `.pal_intentional_exit` phân biệt tắt chủ động (exit 0) vs crash thật (giữ mã lỗi); admin-tool: nhật ký hoạt động server-side (`.pal_admin_activity.json`, route `/api/activity`), `mark_intentional_exit()` trước shutdown/stop, dọn session hết hạn, SW cache v6. `main` = bản thật trừ đúng 1 dòng nút "Sửa save" (chỉ ở `nas-deployment`).
 
 ## 5. Nguồn dữ liệu & lưu ý kỹ thuật cho phiên sau
 
