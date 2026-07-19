@@ -38,7 +38,7 @@ Biến môi trường:
   PAL_TLS_KEY         đường dẫn file private key PEM
   PAL_SESSION_HOURS   thời hạn phiên đăng nhập (giờ) (mặc định 12)
 """
-import os, sys, json, base64, socket, struct, time, hmac, secrets, threading, zlib, ssl, shutil
+import os, sys, json, base64, socket, struct, time, hmac, secrets, threading, zlib, gzip, ssl, shutil
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import request as urlreq, error as urlerr
 
@@ -60,7 +60,22 @@ TLS_KEY   = os.environ.get("PAL_TLS_KEY", "")
 SESSION_SECONDS = int(float(os.environ.get("PAL_SESSION_HOURS", "12")) * 3600)
 CONFIG_PATH = os.environ.get("PAL_CONFIG_PATH", "/pal/Config/LinuxServer/PalWorldSettings.ini")
 REST_BASE = "http://%s:%d/v1/api" % (HOST, REST_PORT)
+REST_AUTH = "Basic " + base64.b64encode(("admin:%s" % PASSWORD).encode("utf-8")).decode("ascii")
 USE_TLS   = bool(TLS_CERT and TLS_KEY)
+
+# Thư mục Config/LinuxServer được cả admin-tool và palworld-server cùng mount
+# (xem compose.yaml), nên dùng làm "hộp thư" báo cho helper.sh biết lần tắt
+# server sắp tới là DO ADMIN-TOOL CHỦ ĐỘNG yêu cầu (không phải crash thật).
+# helper.sh sẽ đọc file này để quyết định có nên báo "thoát bất thường" cho
+# Docker hay không — xem comment trong helper.sh.
+INTENT_MARKER = os.path.join(os.path.dirname(CONFIG_PATH), ".pal_intentional_exit")
+
+def mark_intentional_exit():
+    try:
+        with open(INTENT_MARKER, "w") as f:
+            f.write(str(time.time()))
+    except Exception:
+        pass
 
 # Auth bắt buộc nếu: có đặt mật khẩu app, HOẶC bind ra ngoài localhost.
 ENFORCE_AUTH = bool(APP_PW) or (BIND not in ("127.0.0.1", "localhost"))
@@ -74,8 +89,12 @@ LOCK_SECONDS = 300
 
 def _new_session():
     tok = secrets.token_urlsafe(32)
+    now = time.time()
     with _LOCK:
-        SESSIONS[tok] = time.time() + SESSION_SECONDS
+        # dọn session hết hạn (login là sự kiện hiếm nên prune ở đây là đủ)
+        for t in [t for t, exp in SESSIONS.items() if exp <= now]:
+            del SESSIONS[t]
+        SESSIONS[tok] = now + SESSION_SECONDS
     return tok
 
 def _valid_session(tok):
@@ -95,6 +114,8 @@ def _check_login(ip, password):
         cnt, until = FAILS.get(ip, [0, 0])
         if until > now:
             return False, int(until - now)      # đang bị khóa
+        if until:                               # khóa đã hết hạn -> đếm lại từ đầu
+            cnt = 0
     ok = bool(APP_PW) and hmac.compare_digest(password or "", APP_PW)
     with _LOCK:
         if ok:
@@ -110,8 +131,7 @@ def rest(method, path, body=None):
     url = REST_BASE + path
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urlreq.Request(url, data=data, method=method)
-    token = base64.b64encode(("admin:%s" % PASSWORD).encode("utf-8")).decode("ascii")
-    req.add_header("Authorization", "Basic " + token)
+    req.add_header("Authorization", REST_AUTH)
     req.add_header("Accept", "application/json")
     if data is not None:
         req.add_header("Content-Type", "application/json")
@@ -133,6 +153,16 @@ def read_config():
     except Exception as e:
         return False, str(e)
 
+def _prune_backups(keep=10):
+    d = os.path.dirname(CONFIG_PATH) or "."
+    prefix = os.path.basename(CONFIG_PATH) + ".bak-"
+    try:
+        baks = sorted(f for f in os.listdir(d) if f.startswith(prefix))
+        for f in baks[:-keep]:
+            os.remove(os.path.join(d, f))
+    except OSError:
+        pass
+
 def write_config(text):
     if "OptionSettings" not in text:
         return False, "nội dung không hợp lệ (thiếu OptionSettings) — từ chối ghi"
@@ -140,6 +170,7 @@ def write_config(text):
         if os.path.exists(CONFIG_PATH):
             backup = CONFIG_PATH + ".bak-" + time.strftime("%Y%m%d-%H%M%S")
             shutil.copy2(CONFIG_PATH, backup)
+            _prune_backups()
         tmp = CONFIG_PATH + ".tmp"
         with open(tmp, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
@@ -261,10 +292,99 @@ def _countdown_worker(total, mode, custom, cancel):
     rest("POST", "/announce", {"message": "[SERVER] Server %s ngay bay gio!" % verb})
     rest("POST", "/save")
     time.sleep(1)
-    rest("POST", "/shutdown", {"waittime": 1, "message": "Server %s" % verb})
+    mark_intentional_exit()
+    st, _ = rest("POST", "/shutdown", {"waittime": 1, "message": "Server %s" % verb})
+    log_activity("Đếm ngược kết thúc — đã save và %s server" % verb,
+                 "ok" if 200 <= st < 300 else "err")
     _countdown_done()
 
+# ---------------------------------------------------------------- nhật ký hoạt động
+# Lưu ở server (không phải DOM client) để: đóng tab không mất, PC và điện thoại
+# thấy chung một nhật ký, restart admin-tool vẫn còn (persist ra file JSON trong
+# thư mục config đã mount — cùng chỗ với marker/backup).
+ACT_PATH = os.path.join(os.path.dirname(CONFIG_PATH), ".pal_admin_activity.json")
+ACT_MAX  = 200
+_ACT_LOCK = threading.Lock()
+_ACT = {"next_id": 1, "items": []}    # items: [{i, ts, msg, cls}]
+
+def _act_save_locked():
+    try:
+        tmp = ACT_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(_ACT, f, ensure_ascii=False)
+        os.replace(tmp, ACT_PATH)
+    except Exception:
+        pass    # không ghi được file (vd chạy local không có thư mục) -> vẫn giữ trong RAM
+
+def _act_load():
+    try:
+        with open(ACT_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and isinstance(data.get("items"), list):
+            _ACT["items"] = data["items"][-ACT_MAX:]
+            _ACT["next_id"] = int(data.get("next_id", len(_ACT["items"]) + 1))
+    except Exception:
+        pass
+
+def log_activity(msg, cls="ok"):
+    with _ACT_LOCK:
+        _ACT["items"].append({"i": _ACT["next_id"], "ts": time.time(),
+                              "msg": str(msg)[:500], "cls": cls})
+        _ACT["next_id"] += 1
+        if len(_ACT["items"]) > ACT_MAX:
+            _ACT["items"] = _ACT["items"][-ACT_MAX:]
+        _act_save_locked()
+
+def activity_since(since):
+    with _ACT_LOCK:
+        return [it for it in _ACT["items"] if it["i"] > since]
+
+def activity_clear():
+    with _ACT_LOCK:
+        _ACT["items"] = []
+        _act_save_locked()
+
+_act_load()
+
+# mô tả ngắn cho từng action POST để ghi nhật ký tập trung (xem do_POST)
+_ACTION_LABELS = {
+    "/api/announce":         lambda p: "Thông báo: %s" % (p.get("message", "")[:80]),
+    "/api/save":             lambda p: "Lưu game",
+    "/api/shutdown":         lambda p: "Shutdown server (sau %ss)" % p.get("waittime", 30),
+    "/api/stop":             lambda p: "Stop server ngay",
+    "/api/kick":             lambda p: "Kick %s" % p.get("userid", ""),
+    "/api/ban":              lambda p: "Ban %s" % p.get("userid", ""),
+    "/api/unban":            lambda p: "Gỡ ban %s" % p.get("userid", ""),
+    "/api/rcon":             lambda p: "RCON » %s" % p.get("command", "")[:120],
+    "/api/countdown":        lambda p: "Bắt đầu đếm ngược %s phút (%s)" % (p.get("minutes", 5), p.get("mode", "restart")),
+    "/api/countdown_cancel": lambda p: "Hủy đếm ngược",
+    "/api/config":           lambda p: "Ghi PalWorldSettings.ini",
+    "/api/activity_clear":   lambda p: "Xóa nhật ký",
+}
+
+def _log_action(path, payload, body):
+    fn = _ACTION_LABELS.get(path)
+    if not fn:
+        return
+    try:
+        j = json.loads(body)
+        ok = bool(j.get("ok"))
+        extra = ""
+        if path == "/api/rcon" and ok and j.get("text"):
+            extra = "\n" + str(j.get("text"))[:300]
+        elif not ok:
+            extra = " — " + str(j.get("text") or j.get("error") or ("HTTP %s" % j.get("status")))[:200]
+        log_activity(fn(payload or {}) + extra, "ok" if ok else "err")
+    except Exception:
+        pass
+
 # ---------------------------------------------------------------- routes
+def _num(v, default):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
 def _wrap(status, raw):
     ok = 200 <= status < 300
     try:
@@ -282,6 +402,10 @@ def route(method, path, payload):
         if path == "/api/settings": return _wrap(*rest("GET", "/settings"))
         if path == "/api/countdown_status":
             return 200, json.dumps({"ok": True, "status": 200, "data": countdown_status(), "text": None})
+        if path == "/api/activity":
+            since = int(_num((payload or {}).get("since", 0), 0))
+            return 200, json.dumps({"ok": True, "status": 200,
+                                    "data": {"items": activity_since(since)}, "text": None}, ensure_ascii=False)
         if path == "/api/config":
             ok, data = read_config()
             return 200, json.dumps({"ok": ok, "data": {"text": data} if ok else None,
@@ -294,10 +418,12 @@ def route(method, path, payload):
             return _wrap(*rest("POST", "/save"))
         if path == "/api/shutdown":
             rest("POST", "/save")   # lưu trước cho chắc (server cũng autosave khi tắt êm)
+            mark_intentional_exit()
             return _wrap(*rest("POST", "/shutdown",
-                   {"waittime": int(p.get("waittime", 30)), "message": p.get("message", "")}))
+                   {"waittime": int(_num(p.get("waittime", 30), 30)), "message": p.get("message", "")}))
         if path == "/api/stop":
             rest("POST", "/save")   # Stop tắt gấp -> bắt buộc lưu trước
+            mark_intentional_exit()
             return _wrap(*rest("POST", "/stop"))
         if path == "/api/kick":
             return _wrap(*rest("POST", "/kick",
@@ -308,13 +434,20 @@ def route(method, path, payload):
         if path == "/api/unban":
             return _wrap(*rest("POST", "/unban", {"userid": p.get("userid", "")}))
         if path == "/api/rcon":
-            return _wrap(*rcon(p.get("command", "")))
+            cmd = (p.get("command", "") or "").strip()
+            # Shutdown/DoExit qua RCON cũng là tắt chủ động -> báo helper.sh như REST
+            if cmd.lstrip("/").split(" ", 1)[0].lower() in ("shutdown", "doexit"):
+                mark_intentional_exit()
+            return _wrap(*rcon(cmd))
         if path == "/api/countdown":
-            ok, msg = start_countdown(p.get("minutes", 5), p.get("mode", "restart"), p.get("message", ""))
+            ok, msg = start_countdown(_num(p.get("minutes", 5), 5), p.get("mode", "restart"), p.get("message", ""))
             return 200, json.dumps({"ok": ok, "status": 200 if ok else 409, "data": None, "text": msg})
         if path == "/api/countdown_cancel":
             ok, msg = cancel_countdown()
             return 200, json.dumps({"ok": ok, "status": 200 if ok else 409, "data": None, "text": msg})
+        if path == "/api/activity_clear":
+            activity_clear()
+            return 200, json.dumps({"ok": True})
         if path == "/api/config":
             ok, err = write_config(p.get("text", ""))
             return (200 if ok else 400), json.dumps({"ok": ok, "error": err})
@@ -378,7 +511,7 @@ MANIFEST = json.dumps({
 }, ensure_ascii=False)
 
 SW_JS = r"""
-const C='pal-admin-v4';
+const C='pal-admin-v6';
 self.addEventListener('install',e=>{self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(Promise.all([
   clients.claim(),
@@ -387,15 +520,26 @@ self.addEventListener('activate',e=>{e.waitUntil(Promise.all([
 self.addEventListener('fetch',e=>{
   const u=new URL(e.request.url);
   if(e.request.method!=='GET'||u.pathname.startsWith('/api/')||u.pathname==='/login'||u.pathname==='/logout') return;
+  if(e.request.mode==='navigate'){
+    // HTML: ưu tiên mạng để luôn có UI mới nhất, offline mới rơi về cache
+    e.respondWith(fetch(e.request).then(resp=>{
+      if(resp && resp.ok){const copy=resp.clone();caches.open(C).then(c=>c.put(e.request,copy));}
+      return resp;
+    }).catch(()=>caches.open(C).then(c=>c.match(e.request).then(r=>r||c.match('/')))));
+    return;
+  }
+  // tài nguyên tĩnh (icon, manifest): cache-first
   e.respondWith(caches.open(C).then(c=>c.match(e.request).then(r=>r||fetch(e.request).then(resp=>{
     if(resp && resp.ok) c.put(e.request, resp.clone()); return resp;
-  }).catch(()=>c.match('/')))));
+  }))));
 });
 """
 
 # ---------------------------------------------------------------- HTTP server
 class Handler(BaseHTTPRequestHandler):
     server_version = "PalAdmin"
+    protocol_version = "HTTP/1.1"   # keep-alive: UI poll liên tục, đỡ bắt tay TCP/TLS lại mỗi request
+    timeout = 75                    # đóng kết nối keep-alive bỏ không, tránh giữ thread mãi
     def log_message(self, *a):
         pass
 
@@ -412,12 +556,18 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return _valid_session(self._cookies().get("sid", ""))
 
-    def _send(self, code, body, ctype="application/json; charset=utf-8", cookie=None):
+    def _send(self, code, body, ctype="application/json; charset=utf-8", cookie=None, cache="no-store"):
         b = body.encode("utf-8") if isinstance(body, str) else body
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        # gzip cho nội dung text đủ lớn (trang HTML ~30–50KB -> còn ~5–10KB qua VPN)
+        if (len(b) >= 512 and not ctype.startswith("image/")
+                and "gzip" in (self.headers.get("Accept-Encoding") or "")):
+            b = gzip.compress(b, 6)
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(b)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Frame-Options", "DENY")
@@ -429,17 +579,23 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+    def _route(self, method, path, payload):
+        try:
+            return route(method, path, payload)
+        except Exception as e:
+            return 500, json.dumps({"ok": False, "error": "lỗi nội bộ: %s" % e})
+
     def do_GET(self):
         path = self.path.split("?")[0]
         # tài nguyên công khai (cần cho cả trang đăng nhập + cài PWA)
         if path == "/manifest.webmanifest":
-            return self._send(200, MANIFEST, "application/manifest+json; charset=utf-8")
+            return self._send(200, MANIFEST, "application/manifest+json; charset=utf-8", cache="public, max-age=3600")
         if path == "/sw.js":
             return self._send(200, SW_JS, "application/javascript; charset=utf-8")
         if path == "/icon-192.png":
-            return self._send(200, make_icon(192), "image/png")
+            return self._send(200, make_icon(192), "image/png", cache="public, max-age=86400")
         if path == "/icon-512.png":
-            return self._send(200, make_icon(512), "image/png")
+            return self._send(200, make_icon(512), "image/png", cache="public, max-age=86400")
         if path == "/login":
             if self._authed():
                 return self._redirect("/")
@@ -459,7 +615,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/config":
             return self._send(200, CONFIG_PAGE, "text/html; charset=utf-8")
         if path.startswith("/api/"):
-            code, body = route("GET", path, None)
+            q = {}
+            if "?" in self.path:
+                for part in self.path.split("?", 1)[1].split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        q[k] = v
+            code, body = self._route("GET", path, q)
             return self._send(code, body)
         return self._send(404, json.dumps({"ok": False, "error": "not found"}))
 
@@ -467,6 +629,7 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         length = int(self.headers.get("Content-Length", "0") or "0")
         raw = self.rfile.read(length).decode("utf-8", "replace") if length else ""
+        raw = raw.lstrip("﻿")   # bỏ BOM nếu client gửi kèm
         try:
             payload = json.loads(raw) if raw else {}
         except Exception:
@@ -481,15 +644,19 @@ class Handler(BaseHTTPRequestHandler):
                 if USE_TLS:
                     flags += "; Secure"
                 cookie = "sid=%s; %s; Max-Age=%d" % (tok, flags, SESSION_SECONDS)
+                log_activity("Đăng nhập thành công (IP %s)" % ip)
                 return self._send(200, json.dumps({"ok": True}), cookie=cookie)
             if wait:
+                log_activity("Đăng nhập sai nhiều lần — khóa IP %s %ds" % (ip, wait), "err")
                 return self._send(429, json.dumps({"ok": False, "error": "locked", "wait": wait}))
+            log_activity("Đăng nhập sai (IP %s)" % ip, "err")
             return self._send(401, json.dumps({"ok": False, "error": "wrong"}))
 
         if not self._authed():
             return self._send(401, json.dumps({"ok": False, "error": "auth"}))
         if path.startswith("/api/"):
-            code, body = route("POST", path, payload)
+            code, body = self._route("POST", path, payload)
+            _log_action(path, payload, body)
             return self._send(code, body)
         return self._send(404, json.dumps({"ok": False, "error": "not found"}))
 
@@ -717,9 +884,13 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
   </section>
   <section class="card">
     <h2>RCON console</h2>
-    <div class="row"><div><input type="text" id="rconCmd" placeholder="Info / ShowPlayers / Broadcast xin_chao"></div>
-      <div style="flex:0 0 auto"><button class="btn" id="btnRcon">Chạy</button></div></div>
-    <p class="hint">Broadcast qua RCON không nhận dấu cách/unicode tốt.</p>
+    <label for="rconSel">Lệnh</label>
+    <select id="rconSel"></select>
+    <div id="rconArgs"></div>
+    <div class="row" style="margin-top:9px">
+      <button class="btn" id="btnRcon">Chạy</button>
+    </div>
+    <p class="hint" id="rconHint">Kết quả hiện ở Nhật ký bên dưới.</p>
   </section>
   <section class="card wide">
     <h2>Nhật ký <button class="btn sm" id="btnClear" style="margin-left:auto">Xóa</button></h2>
@@ -733,12 +904,25 @@ var $=function(s){return document.querySelector(s)};
 function toast(m){var t=$("#toast");t.textContent=m;t.classList.add("show");
   clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove("show")},1800);}
 function pad(n){return n<10?"0"+n:""+n}
-function now(){var d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());}
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
-function logLine(msg,cls){var box=$("#log");if(box.querySelector(".empty"))box.innerHTML="";
-  var d=document.createElement("div");d.className="l";
-  d.innerHTML='<span class="t">['+now()+']</span> <span class="'+(cls||"")+'">'+msg+'</span>';
-  box.appendChild(d);box.scrollTop=box.scrollHeight;}
+// Nhật ký lưu ở server: đóng tab / mở trên thiết bị khác vẫn thấy chung một lịch sử.
+var lastActId=0;
+function fmtTs(ts){var d=new Date(ts*1000);return pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());}
+async function pollActivity(){
+  try{
+    var r=await call("GET","/api/activity?since="+lastActId);
+    var items=(r.data&&r.data.items)||[];
+    if(!items.length)return;
+    var box=$("#log");if(box.querySelector(".empty"))box.innerHTML="";
+    items.forEach(function(it){
+      var d=document.createElement("div");d.className="l";
+      d.innerHTML='<span class="t">['+fmtTs(it.ts)+']</span> <span class="'+(it.cls==="err"?"err":"ok")+'">'+esc(it.msg)+'</span>';
+      box.appendChild(d);lastActId=it.i;
+    });
+    while(box.children.length>200)box.removeChild(box.firstChild);
+    box.scrollTop=box.scrollHeight;
+  }catch(e){}
+}
 async function call(method,path,body){
   var opt={method:method,headers:{}};
   if(body){opt.headers["Content-Type"]="application/json";opt.body=JSON.stringify(body);}
@@ -753,13 +937,13 @@ function setConn(ok,err){$("#dot").className="dot "+(ok?"on":"off");
   if(!ok)$("#srvSub").textContent="REST API: "+(err||"lỗi");}
 async function refreshStatus(){
   try{
-    var info=await call("GET","/api/info");
+    var res=await Promise.all([call("GET","/api/info"),call("GET","/api/metrics")]);
+    var info=res[0],m=res[1];
     if(info.ok&&info.data){
       $("#srvName").textContent=info.data.servername||info.data.name||"Palworld Server";
       $("#srvSub").textContent=(info.data.version?("v"+info.data.version+" · "):"")+"REST API";
       setConn(true);
     }else{ setConn(false, info.status===401?"sai AdminPassword":(info.status===0?"không kết nối được (server tắt/REST chưa bật?)":("HTTP "+info.status))); return; }
-    var m=await call("GET","/api/metrics");
     if(m.ok&&m.data){
       $("#mPlayers").textContent=(m.data.currentplayernum!=null?m.data.currentplayernum:"–")+" / "+(m.data.maxplayernum!=null?m.data.maxplayernum:"–");
       $("#mFps").textContent=m.data.serverfps!=null?m.data.serverfps:"–";
@@ -769,6 +953,7 @@ async function refreshStatus(){
 }
 async function refreshPlayers(){
   var wrap=$("#playersWrap");
+  if(wrap.querySelector(".btn.armed"))return; // đang chờ xác nhận Kick/Ban — đừng vẽ lại mất trạng thái
   try{
     var r=await call("GET","/api/players");
     if(!r.ok){wrap.innerHTML='<div class="empty">Không lấy được danh sách (HTTP '+r.status+'). '+esc(r.text||"")+'</div>';$("#pcount").textContent="";return;}
@@ -798,29 +983,93 @@ async function mod(path,uid,name,verb){
   report(verb+" "+(name||uid), await call("POST",path,{userid:uid,message:"Ban da bi "+verb}));refreshPlayers();
 }
 function report(action,r){
-  if(r.ok){logLine("✓ "+esc(action)+" — OK"+(r.text?(" · "+esc(r.text)):""),"ok");toast("✓ "+action);}
-  else{logLine("✗ "+esc(action)+" — HTTP "+r.status+" "+esc(r.text||""),"err");toast("Lỗi: "+action);}
+  toast(r.ok?("✓ "+action):("Lỗi: "+action));
+  pollActivity();   // server đã ghi nhật ký — kéo về hiển thị ngay
 }
 $("#btnAnnounce").onclick=async function(){var m=$("#annMsg").value.trim();if(!m){toast("Nhập nội dung");return;}
   report("announce",await call("POST","/api/announce",{message:m}));$("#annMsg").value="";};
 $("#btnSave").onclick=async function(){report("save",await call("POST","/api/save",{}));};
 $("#btnUnban").onclick=async function(){var id=$("#unbanId").value.trim();if(!id){toast("Nhập User ID");return;}
   report("unban "+id,await call("POST","/api/unban",{userid:id}));$("#unbanId").value="";};
-$("#btnRcon").onclick=async function(){var c=$("#rconCmd").value.trim();if(!c){toast("Nhập lệnh");return;}
+// ---- RCON dạng UI: chọn lệnh -> hiện ô tham số tương ứng ----
+// us:1 = thay dấu cách bằng "_" (RCON Palworld cắt chuỗi ở dấu cách), num:1 = ô số,
+// raw:1 = gửi nguyên văn (lệnh tùy ý), danger:1 = bấm 2 lần xác nhận.
+var RCON_CMDS=[
+ {c:"Info",d:"Thông tin server",h:"Xem tên và phiên bản server."},
+ {c:"ShowPlayers",d:"Danh sách người chơi",h:"Trả về CSV: name,playeruid,steamid."},
+ {c:"Save",d:"Lưu world",h:"Lưu game ngay lập tức."},
+ {c:"Broadcast",d:"Thông báo toàn server",h:"RCON không nhận dấu cách/tiếng Việt tốt — dấu cách tự thay bằng \"_\". Muốn gửi có dấu, dùng thẻ Thông báo (REST).",
+   args:[{n:"Nội dung",ph:"vd: server_restart_10p",req:1,us:1}]},
+ {c:"KickPlayer",d:"Kick người chơi",h:"User ID lấy ở bảng người chơi phía trên.",danger:1,
+   args:[{n:"User ID",ph:"steam_0123456789",req:1}]},
+ {c:"BanPlayer",d:"Ban người chơi",h:"Ban theo User ID (gỡ bằng UnBanPlayer).",danger:1,
+   args:[{n:"User ID",ph:"steam_0123456789",req:1}]},
+ {c:"UnBanPlayer",d:"Gỡ ban",h:"Gỡ ban theo User ID.",
+   args:[{n:"User ID",ph:"steam_0123456789",req:1}]},
+ {c:"Shutdown",d:"Tắt server sau N giây",h:"Tắt êm có đếm giờ + lời nhắn (không dấu cách). Docker sẽ tự bật lại server.",danger:1,
+   args:[{n:"Giây",ph:"30",def:"30",num:1,req:1},{n:"Lời nhắn",ph:"server_se_tat",us:1}]},
+ {c:"DoExit",d:"Tắt NGAY lập tức",h:"⚠️ Dừng tiến trình ngay, không đếm giờ — nên bấm Lưu game trước.",danger:1},
+ {c:"",d:"✎ Lệnh tùy ý (gõ tay)",h:"Gõ nguyên văn lệnh RCON bất kỳ.",
+   args:[{n:"Lệnh",ph:"vd: Broadcast xin_chao",req:1,raw:1}]},
+];
+function rconSelected(){return RCON_CMDS[parseInt($("#rconSel").value,10)]||RCON_CMDS[0];}
+function renderRconArgs(){
+  var cmd=rconSelected(),box=$("#rconArgs");box.innerHTML="";
+  (cmd.args||[]).forEach(function(a,i){
+    var lab=document.createElement("label");lab.textContent=a.n;lab.style.marginTop="9px";
+    var inp=document.createElement("input");inp.id="rconArg"+i;
+    inp.type=a.num?"number":"text";if(a.num)inp.min=0;
+    inp.placeholder=a.ph||"";if(a.def)inp.value=a.def;
+    inp.addEventListener("keydown",function(e){if(e.key==="Enter")$("#btnRcon").click();});
+    box.appendChild(lab);box.appendChild(inp);
+  });
+  $("#rconHint").textContent=cmd.h||"";
+  var b=$("#btnRcon");
+  b.classList.toggle("danger",!!cmd.danger);
+  b.textContent=cmd.danger?"Chạy (bấm 2 lần)":"Chạy";
+}
+function buildRconCmd(){
+  var cmd=rconSelected(),parts=[],missing=false;
+  (cmd.args||[]).forEach(function(a,i){
+    var v=($("#rconArg"+i).value||"").trim();
+    if(a.req&&!v){missing=true;return;}
+    if(a.us)v=v.replace(/\s+/g,"_");
+    if(v)parts.push(v);
+  });
+  if(missing)return null;
+  return cmd.c?(cmd.c+(parts.length?" "+parts.join(" "):"")):parts.join(" ");
+}
+async function runRcon(){
+  var c=buildRconCmd();
+  if(!c){toast("Điền tham số bắt buộc");return;}
   var r=await call("POST","/api/rcon",{command:c});
-  if(r.ok)logLine("» "+esc(c)+"\n"+esc(r.text||r.data||""),"ok");else logLine("» "+esc(c)+" ✗ "+esc(r.text||""),"err");
-  toast(r.ok?"RCON OK":"RCON lỗi");};
-$("#rconCmd").addEventListener("keydown",function(e){if(e.key==="Enter")$("#btnRcon").click();});
+  toast(r.ok?"RCON OK":"RCON lỗi");
+  pollActivity();   // lệnh + kết quả đã nằm trong nhật ký server
+}
+(function(){
+  var sel=$("#rconSel");
+  RCON_CMDS.forEach(function(c,i){var o=document.createElement("option");o.value=i;
+    o.textContent=c.c?(c.c+" — "+c.d):c.d;sel.appendChild(o);});
+  sel.addEventListener("change",renderRconArgs);
+  renderRconArgs();
+})();
+$("#btnRcon").onclick=function(){if(rconSelected().danger)arm(this,runRcon);else runRcon();};
 $("#btnShutdown").onclick=function(){arm(this,async function(){
   report("shutdown",await call("POST","/api/shutdown",{waittime:parseInt($("#sdWait").value||"30",10),message:$("#sdMsg").value||"Server se tat"}));});};
 $("#btnStop").onclick=function(){arm(this,async function(){report("stop",await call("POST","/api/stop",{}));});};
 $("#btnRefresh").onclick=refreshPlayers;
-$("#btnClear").onclick=function(){$("#log").innerHTML='<div class="empty">Chưa có hoạt động.</div>';};
+$("#btnClear").onclick=async function(){
+  await call("POST","/api/activity_clear",{});
+  $("#log").innerHTML='<div class="empty">Chưa có hoạt động.</div>';
+  pollActivity();
+};
 $("#btnLogout").onclick=function(){location.href="/logout";};
 if(__ENFORCE__)$("#btnLogout").hidden=false;
 function fmtRemain(s){s=parseInt(s||0,10);if(s>=60){var m=Math.floor(s/60),ss=s%60;return m+" phút"+(ss?(" "+ss+"s"):"");}return s+" giây";}
+var cdActive=false;
 async function pollCountdown(){
   try{var r=await call("GET","/api/countdown_status");var s=(r&&r.data)||{};var b=$("#cdBanner");
+    cdActive=!!s.active;
     if(s.active){b.hidden=false;$("#cdRemain").textContent=fmtRemain(s.remaining)+" · "+(s.mode==="restart"?"khởi động lại":"tắt");}
     else b.hidden=true;
   }catch(e){}
@@ -830,8 +1079,14 @@ $("#btnCountdown").onclick=function(){arm(this,async function(){
   report("đếm ngược "+($("#cdMode").value==="restart"?"restart":"shutdown"),r);pollCountdown();
 });};
 $("#btnCdCancel").onclick=async function(){report("hủy đếm ngược",await call("POST","/api/countdown_cancel",{}));pollCountdown();};
-refreshStatus();refreshPlayers();pollCountdown();
-setInterval(refreshStatus,6000);setInterval(refreshPlayers,10000);setInterval(pollCountdown,2000);
+function refreshAll(){refreshStatus();refreshPlayers();pollCountdown();pollActivity();}
+refreshAll();
+// tạm dừng poll khi app chạy nền (đỡ tốn pin/mạng trên điện thoại), poll lại ngay khi mở lên
+setInterval(function(){if(!document.hidden){refreshStatus();pollActivity();}},6000);
+setInterval(function(){if(!document.hidden)refreshPlayers();},10000);
+var cdTick=0;
+setInterval(function(){if(document.hidden)return;cdTick++;if(cdActive||cdTick%5===0)pollCountdown();},2000);
+document.addEventListener("visibilitychange",function(){if(!document.hidden)refreshAll();});
 </script></body></html>"""
 PAGE = PAGE.replace("__ENFORCE__", "true" if ENFORCE_AUTH else "false")
 
@@ -867,22 +1122,6 @@ CONFIG_PAGE = r"""<!doctype html>
       --danger:#e07a60; --danger-weak:#3a201a;
       --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
     }
-  }
-  :root[data-theme="light"]{
-    --bg:#f4f6f3; --surface:#ffffff; --surface-2:#eef1ec; --surface-3:#e7ebe4;
-    --text:#1a2129; --muted:#5c6a72; --faint:#8a978f; --border:#dde3db;
-    --accent:#1f9c78; --accent-weak:#e2f1eb; --accent-ink:#0e5c46;
-    --warn:#b7770c; --warn-weak:#f6ecd6; --warn-line:#d99a2b;
-    --danger:#c0533b; --danger-weak:#f6e2dc;
-    --shadow:0 1px 2px rgba(20,30,25,.05),0 8px 24px -12px rgba(20,30,25,.18);
-  }
-  :root[data-theme="dark"]{
-    --bg:#12171a; --surface:#1a2126; --surface-2:#212a30; --surface-3:#28333a;
-    --text:#e8ece8; --muted:#9aa8a2; --faint:#6f7d77; --border:#2b353b;
-    --accent:#3fca9e; --accent-weak:#123028; --accent-ink:#8fe6cb;
-    --warn:#e0a53a; --warn-weak:#332a15; --warn-line:#a9781f;
-    --danger:#e07a60; --danger-weak:#3a201a;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
   }
   *{box-sizing:border-box}
   [hidden]{display:none!important}
@@ -1081,6 +1320,10 @@ CONFIG_PAGE = r"""<!doctype html>
     </div>
     <span class="changed-pill" id="changedPill" hidden><span id="changedCount">0</span> đã đổi</span>
     <div class="actions">
+      <a class="btn ghost" href="/" style="text-decoration:none" title="Quay về bảng điều khiển admin">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Admin
+      </a>
       <button class="btn ghost" id="btnLoadServer" title="Nạp cấu hình hiện tại đang chạy trên server">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
         Nạp từ server
@@ -1485,8 +1728,8 @@ function buildControl(it){
       var n=parseFloat(v); if(isNaN(n)){ return; }
       if(it.t==="i") n=Math.round(n);
       state[k]=n;
-      if(slider && !fromSlider && n>=it.min && n<=it.max) slider.value=n;
-      if(!fromSlider){} else num.value=n;
+      if(slider && n>=it.min && n<=it.max) slider.value=n;
+      if(fromSlider) num.value=n;
       syncRow(k); syncSummary();
     }
     num.addEventListener("input",function(){ commit(num.value,false); });
@@ -1575,16 +1818,17 @@ function applyImport(raw){
     if(!META[k]) return; var m=META[k], v=raw[k];
     try{
       if(m.t==="b") state[k]=/^true$/i.test(v);
-      else if(m.t==="i") state[k]=parseInt(v,10);
-      else if(m.t==="f") state[k]=parseFloat(v);
-      else if(m.t==="e") state[k]=stripQ(v);
-      else if(m.t==="s"||m.t==="p") state[k]=stripQ(v);
-      else if(m.t==="raw") state[k]=stripQ(v);
+      else if(m.t==="i"||m.t==="f"){
+        var n=(m.t==="i")?parseInt(v,10):parseFloat(v);
+        if(isNaN(n)) return;            // giá trị rác -> giữ nguyên, đừng nạp NaN vào state
+        state[k]=n;
+      }
       else if(m.t==="pf"){
         var s=v.replace(/^\(|\)$/g,"");
         state[k]= s.length? s.split(",").map(function(x){return x.trim();}).filter(Boolean) : [];
       }
-      if(!isNaN(state[k])||typeof state[k]!=="number") applied++;
+      else state[k]=stripQ(v);          // e / s / p / raw
+      applied++;
     }catch(e){}
   });
   return applied;
