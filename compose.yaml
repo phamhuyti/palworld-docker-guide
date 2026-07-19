@@ -14,6 +14,7 @@ services:
       - "-useperfthreads"
       - "-NoAsyncLoadingThread"
       - "-UseMultithreadForDS"
+      # - "-publiclobby"
     ports:
       - "192.168.1.160:8211:8211/udp"
       - "192.168.1.160:25575:25575/tcp"   # RCON — chỉ LAN truy cập được, không lộ ra Internet
@@ -46,3 +47,25 @@ services:
     command: ["python", "/app/admin-tool.py"]
     ports:
       - "192.168.1.160:8080:8080/tcp"   # chỉ LAN/VPN — KHÔNG port-forward ra Internet
+
+  # Trình sửa save file (Palworld Save Pal — fork phamhuyti/palworld-save-pal,
+  # clone tại /volume4/docker/palworld-save-pal). Vào VPN rồi mở
+  # http://192.168.1.160:5174 — KHÔNG có đăng nhập, chỉ bảo vệ bằng LAN/VPN.
+  # UI tự liệt kê world trong PSP_SAVES_DIR ("Server saves") — bấm chọn là load.
+  # LƯU Ý: dừng palworld-server trước khi ghi save để tránh xung đột file.
+  palworld-savepal:
+    build:
+      context: ../palworld-save-pal
+      dockerfile: Dockerfile
+      args:
+        # host:port mà TRÌNH DUYỆT dùng để kết nối WebSocket về server này
+        - PUBLIC_WS_URL=192.168.1.160:5174/ws
+    container_name: palworld-savepal
+    restart: unless-stopped
+    environment:
+      PSP_SAVES_DIR: /saves            # UI tự liệt kê world trong đây để chọn, khỏi upload
+    volumes:
+      - ./savepal-db:/app/db            # DB cài đặt/preset của Save Pal
+      - ./Saved/SaveGames:/saves        # save world thật — Save Pal đọc/ghi trực tiếp
+    ports:
+      - "192.168.1.160:5174:5174/tcp"   # chỉ LAN/VPN — KHÔNG port-forward ra Internet
