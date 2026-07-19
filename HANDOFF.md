@@ -1,7 +1,7 @@
 # HANDOFF — Bối cảnh công việc Palworld Docker Guide
 
 > File tổng hợp để tiếp tục công việc trên Claude Code desktop (hoặc phiên làm việc khác).
-> Cập nhật lần cuối: 16/07/2026.
+> Cập nhật lần cuối: 19/07/2026.
 
 ## 1. Mục tiêu dự án
 
@@ -26,7 +26,9 @@ Phân tích repo Docker **chính thức** của Pocketpair cho Palworld dedicate
 | `README.md` | Mục lục + chạy nhanh (đã thêm config-editor.html + admin-tool.py) | ✅ Xong |
 | `.gitignore` | Chặn `Saved/` (quan trọng nhất — toàn bộ save + `PalWorldSettings.ini` có AdminPassword thật), `.env` (password thật cho compose), `__pycache__/`, `*.local.*`, `run-admin*`, `backup-*.tar.gz` | ✅ Xong |
 
-Lịch sử commit chính: `0e95884` (tài liệu ban đầu) → `558c5f0` (auto-update) → `264f1ad` (RCON/REST + update.sh) → `5933ca0` (HANDOFF) → `8dc6d31` (config-editor.html) → `08764f8` (editor mở/lưu file) → `fcc0518`/`773acb2` (admin-tool.py + bảo mật/PWA) → `6fab9ef` (service palworld-admin trong compose) → `0ee7a9d` (đếm ngược spam) → `7f0b2ce` (save trước shutdown/stop) → `346e057` (docs README+HANDOFF) → `3115e70` (trang /config + fix cache SW).
+Lịch sử commit chính: `0e95884` (tài liệu ban đầu) → `558c5f0` (auto-update) → `264f1ad` (RCON/REST + update.sh) → `5933ca0` (HANDOFF) → `8dc6d31` (config-editor.html) → `08764f8` (editor mở/lưu file) → `fcc0518`/`773acb2` (admin-tool.py + bảo mật/PWA) → `6fab9ef` (service palworld-admin trong compose) → `0ee7a9d` (đếm ngược spam) → `7f0b2ce` (save trước shutdown/stop) → `346e057` (docs README+HANDOFF) → `3115e70` (trang /config + fix cache SW) → `aeb322c` (đối chiếu HANDOFF với thực tế).
+
+**Nhánh `nas-deployment`** (tạo 17/07): snapshot cấu hình **thật đang chạy** trên NAS — khác `main` (template chung 127.0.0.1): `compose.yaml` giữ IP LAN thật `192.168.1.160`, `update.sh` bản thật nhưng đã sửa đọc password từ `.env` thay vì hardcode (không có secret trong repo). Các thay đổi cá nhân hoá (nút "Sửa save" trỏ IP LAN, service `palworld-savepal`) chỉ nằm trên nhánh này, KHÔNG đưa vào `main`.
 
 ## 3. Thông tin phiên bản (quan trọng khi tiếp tục)
 
@@ -45,6 +47,12 @@ Lịch sử commit chính: `0e95884` (tài liệu ban đầu) → `558c5f0` (aut
 - Còn tùy chọn: đặt lịch `update.sh` qua Synology Task Scheduler (`/volume4/docker/Palworld/update.sh`).
 - **Đã LÀM tiếp trong phiên (16/07/2026, muộn hơn cùng ngày):** thêm trang `/config` vào admin-tool.py + mount config dir (xem mục 2). Đã deploy và test trực tiếp trên server thật: `docker compose up -d palworld-admin` (chỉ recreate service admin, không đụng `palworld-server`), login → `/config` → `GET/POST /api/config` round-trip OK, backup tự tạo đúng, sau đó đã khôi phục lại `PalWorldSettings.ini` về đúng bản gốc (test không để lại thay đổi thật). Cũng phát hiện + fix bug SW cache (xem mục 2) ngay trên server thật, đã restart `palworld-admin` để áp dụng.
 - **Mới:** NAS giờ có sẵn **bản clone git thật** của repo tại `/volume4/docker/palworld-docker-guide` (tách biệt thư mục triển khai `/volume4/docker/Palworld`), push bằng **SSH deploy key riêng** `~/.ssh/id_ed25519_palworld_guide` (đã thêm public key vào Settings → Deploy keys của repo, có quyền write, `core.sshCommand` đã set sẵn trong clone này). Phiên sau muốn sửa tiếp trực tiếp trên NAS: `cd /volume4/docker/palworld-docker-guide && git pull`, sửa xong copy file cần thiết (vd. `admin-tool.py`) đè sang `/volume4/docker/Palworld/` để deploy, rồi commit+push từ đây — không cần tạo lại key. Nếu người dùng có clone riêng trên Windows, clone đó **không tự đồng bộ** — cần tự `git pull`.
+- **Phiên 19/07/2026 — tích hợp trình sửa save (Palworld Save Pal):**
+  - Xuất phát: người dùng muốn cài mod [Rainbow Trait Chance](https://www.nexusmods.com/palworld/mods/2070) — kết luận **KHÔNG cài được**: mod là file JSON cho **PalSchema**, PalSchema cần **UE4SS**, UE4SS trên dedicated server chỉ chạy bản **Windows** (server đang chạy bản Linux native trong Docker). Đã chốt hướng thay thế: sửa save trực tiếp.
+  - **Fork `phamhuyti/palworld-save-pal`** (gốc: oMaN-Rod/palworld-save-pal — editor save Rust+Svelte, web qua Docker). Clone tại **`/volume4/docker/palworld-save-pal`**, deploy key riêng `~/.ssh/id_ed25519_palworld_savepal` (write, `core.sshCommand` đã set trong clone). 2 commit đã push lên fork: `0a5ecdc7` (Dockerfile: build UI bằng `node:24`/npm thay `oven/bun` — bun crash trên kernel 4.4 của Synology; node 24 do `ol-contextmenu` đòi node>=24) và `b265012d` (endpoint mới `GET /api/local-saves` quét `PSP_SAVES_DIR` liệt kê world + khung "Server saves" ở trang `/upload` — bấm chọn save của server trực tiếp, khỏi upload zip).
+  - **Service mới `palworld-savepal`** trong compose thật trên NAS: build từ clone fork (`context: ../palworld-save-pal`, arg `PUBLIC_WS_URL=192.168.1.160:5174/ws`), bind `192.168.1.160:5174` (chỉ LAN/VPN, **không có đăng nhập** — đã chốt chấp nhận), env `PSP_SAVES_DIR=/saves`, mount `./Saved/SaveGames:/saves` (đọc/ghi) + `./savepal-db:/app/db`. **KHÔNG mount docker.sock** (đã chốt bỏ tính năng quản lý server của Save Pal). Đã build, chạy, kiểm chứng: `/api/local-saves` trả đúng world thật ("Autosave_W", id `A8FA00352DE24A1E9267A25FB999BA7B`).
+  - `admin-tool.py` bản deploy thật: thêm nút **"Sửa save"** (mở `http://192.168.1.160:5174` tab mới) cạnh nút "Cấu hình", bump SW cache `v6`. Thay đổi này trỏ IP LAN cứng → chỉ commit vào nhánh `nas-deployment`, KHÔNG vào `main`.
+  - **Quy trình dùng an toàn:** dừng `palworld-server` trước khi LƯU save trong Save Pal (server đang chạy sẽ ghi đè), lưu xong start lại.
 
 ## 5. Nguồn dữ liệu & lưu ý kỹ thuật cho phiên sau
 
