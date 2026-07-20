@@ -1,7 +1,7 @@
 # HANDOFF — Bối cảnh công việc Palworld Docker Guide
 
 > File tổng hợp để tiếp tục công việc trên Claude Code desktop (hoặc phiên làm việc khác).
-> Cập nhật lần cuối: 19/07/2026.
+> Cập nhật lần cuối: 20/07/2026.
 
 ## 1. Mục tiêu dự án
 
@@ -54,6 +54,26 @@ Lịch sử commit chính: `0e95884` (tài liệu ban đầu) → `558c5f0` (aut
   - `admin-tool.py` bản deploy thật: thêm nút **"Sửa save"** (mở `http://192.168.1.160:5174` tab mới) cạnh nút "Cấu hình", bump SW cache `v6`. Thay đổi này trỏ IP LAN cứng → chỉ commit vào nhánh `nas-deployment`, KHÔNG vào `main`.
   - **Quy trình dùng an toàn:** dừng `palworld-server` trước khi LƯU save trong Save Pal (server đang chạy sẽ ghi đè), lưu xong start lại.
   - **Back-port về `main` (`c6011ed`):** các cải tiến đã chạy thật trên NAS nhưng chưa từng vào repo — `helper.sh` bắt exit code + marker `.pal_intentional_exit` phân biệt tắt chủ động (exit 0) vs crash thật (giữ mã lỗi); admin-tool: nhật ký hoạt động server-side (`.pal_admin_activity.json`, route `/api/activity`), `mark_intentional_exit()` trước shutdown/stop, dọn session hết hạn, SW cache v6. `main` = bản thật trừ đúng 1 dòng nút "Sửa save" (chỉ ở `nas-deployment`).
+- **Phiên 20/07/2026 — fix nút Save bị ẩn + đồng bộ Save Pal lên upstream v1.2.0** (làm trên fork `phamhuyti/palworld-save-pal`, clone `/volume4/docker/palworld-save-pal`):
+  - **Bug nút Save biến mất:** `navItems.ts` chỉ hiện nút Save (nav-rail) khi `PUBLIC_DESKTOP_MODE=true` — coi mọi deployment web là chỉ có Download, không ghi trực tiếp được. Sai với setup của mình: từ khi có tính năng "Server saves" (chọn world thẳng từ `PSP_SAVES_DIR`), session đó vẫn có `SaveKind::Steam { level_path }` — một đường dẫn thật trên đĩa mà `save_modded_steam_save` ghi thẳng vào, không cần dialog OS nào. Chỉ có save **upload zip** (`SaveKind::InMemory`) là thật sự không có gì trên đĩa để ghi đè.
+  - **Fix (`7876da67`):** thêm field `writable: bool` vào `LoadedSaveFilesData` (backend, `psp-server/src/handlers/save_file.rs`), tính qua helper `session_is_writable(kind)` = `!matches!(kind, SaveKind::InMemory)` — dùng chung ở cả 4 chỗ tạo payload (select_save, load_zip_file, gamepass load, reattach sau refresh) để không lệch nhau. Frontend (`navItems.ts`) đổi điều kiện hiện nút Save từ `ctx.desktop` sang `Boolean(ctx.appState.saveFile?.writable)`.
+  - **Merge upstream `v1.2.0` (`8e8dccbe`):** fork trước đó dừng ở base `v1.0.3`, chậm **69 commit** so với upstream (`oMaN-Rod/palworld-save-pal`) — gồm WorldOption editor (chỉnh setting cấp world), watchtower trên bản đồ, bulk export/import preset, theme mới, sửa lưu file native dialog ở bản desktop... Remote `upstream` đã add sẵn trong clone (`https://github.com/oMaN-Rod/palworld-save-pal.git`). Conflict xảy ra ở đúng 3 file mình từng sửa cho tính năng riêng — coi mục RUNBOOK bên dưới để biết chi tiết cách resolve.
+  - Build lại mất lâu hơn bình thường vì `Cargo.lock` đổi (upstream thêm dependency mới) → `cargo chef cook` phải compile lại toàn bộ dependency graph Rust từ đầu (kể cả `uesave-rs`, `ooz-rs` từ git) thay vì dùng cache — ~15-20 phút trên NAS này thay vì vài chục giây như build không đổi `Cargo.lock`.
+  - Đã build (`docker compose build palworld-savepal`), deploy (`up -d`), verify: log container lên sạch (`desktop_mode=false`, không lỗi), `curl http://192.168.1.160:5174/api/local-saves` vẫn trả đúng world thật. Đã push cả 2 commit lên fork.
+  - **RUNBOOK — cách áp dụng release upstream mới của Save Pal (làm lại các bước sau mỗi khi có bản mới):**
+    1. Check version hiện tại của fork vs. mới nhất của upstream: `cd /volume4/docker/palworld-save-pal && curl -s https://api.github.com/repos/oMaN-Rod/palworld-save-pal/tags | python3 -c "import json,sys; [print(t['name']) for t in json.load(sys.stdin)[:5]]"` rồi so với `git log --oneline -1 upstream/main` (nếu remote `upstream` chưa có: `git remote add upstream https://github.com/oMaN-Rod/palworld-save-pal.git`).
+    2. `git fetch upstream --tags`, xem trước phạm vi đổi: `git log --oneline main..upstream/main` và `git diff --stat main upstream/main -- <file mình từng sửa>` để ước lượng độ xung đột trước khi merge thật.
+    3. `git merge upstream/main --no-commit --no-ff` rồi resolve conflict. Các file **hay xung đột nhất** (đụng đúng chỗ 2 tính năng riêng của fork: Dockerfile node/npm + endpoint `/api/local-saves`/nút Save):
+       - `ui/src/routes/upload/+page.svelte` — thường chỉ xung đột ở dòng `import ... from 'lucide-svelte'` (icon mới của upstream cộng với icon riêng của mình `HardDrive/Users/RefreshCw`) — gộp chung 1 dòng import, phần thân JSX thường tự merge sạch.
+       - `ui/src/lib/types/game.ts` — type `SaveFile`: giữ cả field `writable` (của mình) lẫn field mới upstream thêm (vd. `world_option_present`).
+       - `ui/src/lib/ws/handlers/saveFileHandler.ts` — destructure + gán `appState.saveFile = {...}`: gộp đủ field cả 2 bên.
+       - `psp-server/src/handlers/save_file.rs` — struct `LoadedSaveFilesData` và các chỗ khởi tạo nó (`from_session`, `handle_select_save`, `handle_load_zip_file`): thêm field mới của upstream + giữ field `writable`/hàm `session_is_writable`.
+       - `psp-server/src/handlers/gamepass.rs` — payload `serde_json::json!({...})` của gamepass load: thêm `"writable": true` nếu bị mất sau merge (không dùng struct nên Git không tự nhắc field thiếu).
+       - Router (`psp-server/src/router.rs`), `lib.rs`, `Dockerfile`, file mới `psp-server/src/api_local_saves.rs` — hiếm khi xung đột vì upstream không đụng tới, nhưng **luôn kiểm lại sau merge** bằng `grep -n "local-saves\|api_local_saves" psp-server/src/router.rs psp-server/src/lib.rs` và `grep -n "node:24" Dockerfile` để chắc 2 tính năng riêng không bị merge tool xoá nhầm.
+    4. Add file đã resolve (`git add <file>`), `git commit --no-edit`.
+    5. Build: `docker compose build palworld-savepal` — **cảnh báo:** nếu `Cargo.lock` nằm trong diff của merge, bước `cargo chef cook` sẽ build lại toàn bộ dependency Rust từ đầu (không cache được), có thể mất 15-20 phút thay vì build tăng-trưởng thường chỉ vài chục giây — không phải bị treo, cứ để chạy.
+    6. Deploy + verify: `docker compose up -d palworld-savepal`, `docker compose logs palworld-savepal --tail 50` (không có dòng lỗi/panic), `curl http://192.168.1.160:5174/api/local-saves` (trả đúng world thật, không rỗng/500).
+    7. `git push origin main`.
 
 ## 5. Nguồn dữ liệu & lưu ý kỹ thuật cho phiên sau
 
